@@ -1,0 +1,231 @@
+---
+title: "Health Human Resources Supply and Demand Forecasting"
+subtitle: "BC Cancer"
+date: today
+author: Tim Hister
+format: 
+  revealjs:
+    incremental: true
+    auto-animate: true
+execute:
+  echo: true
+  output-location: fragment
+filters:
+  - fragment-shortcode.lua
+---
+
+```{r}
+#| echo: false
+
+pacman::p_load(tidyverse, hsiaR, reactable, tidymodels)
+set.seed(123)
+```
+
+# Introduction
+
+## Motivation
+
+![](images/clipboard-2192972124.png){.fragment}
+
+## Project Plan
+
+-   Forecast supply and demand of physicians in B.C.
+-   $gap_t = demand_t - supply_t$
+-   Physician Headcount and "full time equivalent" (FTE; measure for physician productivity)
+-   Multiple models; keep two best.
+-   "Best" == ???
+
+## `hsiaR`
+
+-   R package I wrote for hsiaR division at MOH
+-   Features: MOH database, fiscal years, BC Health Authorities, and much, much more!
+
+::: fragment
+```{r}
+hsiaR::hiQuery
+```
+:::
+
+# Data
+
+## Data Overall
+
+-   ![Ministry of Health datasets](https://www2.gov.bc.ca/gov/content/health/conducting-health-research-evaluation/data-access-health-data-central/health-sector-partner-access-to-data/third-party-access), such as ![MSP](https://healthdataplatformbc.ca/hdpbc-data).
+-   Not publicly available
+-   SQL code/random numbers
+
+## Specialties
+
+-   Doctors registered with MSP
+
+::: fragment
+```{r}
+#| eval: false
+hiQuery("select distinct mrspec Specialty_Code, spec_desc Specialty 
+        from msea_team_lvl2.vt4 order by 1")
+```
+
+```{r}
+#| echo: false
+tibble(spec=1:5, desc=LETTERS[1:5]) |>
+  head(5)
+```
+:::
+
+# Supply
+
+## Headcount
+
+-   $headcount_t = headcount_{t-1} + entrants_t - retirees_{t-1}$
+-   $entrants_t$: average of the three most recent years of available data.
+-   Retirements: logistic regression
+-   $\begin{aligned}[t]
+retirement\_prob = \beta_0 &+ \beta_1 \cdot rurality \\
+                           &+ \beta_2 \cdot age + \beta_3 \cdot age^2 \\
+                           &+ \beta_4 \cdot gender \\
+                           &+ \beta_5 \cdot model\_specific\_vars
+\end{aligned}$
+
+## Specialties
+
+```{r}
+specialties = tibble(
+  spec_id = 0:3,
+  spec = c("FAMILY MEDICINE", "DERMATOLOGY", "NEUROLOGY", "PSYCHIATRY")
+)
+
+specialties
+```
+
+
+## (Fake) Data Set
+
+```{r}
+n = 1000L
+
+phys_df = tibble(
+  id = 1:n,
+  spec_id = sample(0:3, n, replace = T), 
+  age = as.integer(rnorm(n, 45, 12)) |> pmax(20L),
+  rurality = runif(n),
+  gender = sample(c("M","F"), n, T)
+) |>
+  crossing(i = 0:2) |>
+  mutate(age = age + i) |>
+  mutate(fiscal = Vectorize(hsiaR::fiscal_add)("FY2020/21", i)) |>
+  mutate(age2 = age^2) |>
+  mutate(retired = rurality + (age + age2) + if_else(gender == "M", 10, 0) + rnorm(1, 2000, 100)) # linear combination regressors plus 'normal' noise
+  
+  
+phys_df$retired = phys_df$retired > quantile(phys_df$retired, .9) # 90th percentile
+
+phys_df = phys_df |>
+  select(id, fiscal, spec_id, rurality, age, age2, gender, retired) |>
+  arrange(id, fiscal)
+
+# remove years after retirement
+phys_df = phys_df |>
+  anti_join(
+    phys_df |>
+      filter(retired) |>
+      arrange(id, fiscal) |>
+      group_by(id) |>
+      slice_head(n=1),
+    by=join_by(id==id, fiscal > fiscal)
+)
+
+phys_df = phys_df |>
+  mutate(gender = as_factor(gender)) |>
+  mutate(retired = as_factor(retired)) |>
+  mutate(fiscal = Vectorize(hsiaR::fiscal_diff)("FY2020/21", fiscal))
+
+
+head(phys_df)
+```
+
+
+
+## Data
+
+```{r}
+#| eval: false
+
+gridExtra::grid.arrange(
+  select(phys_df, id, specialty, age) |> 
+    pivot_longer(cols = c(specialty, age)) |>
+    ggplot(aes(x=value, fill=name)) +
+    facet_wrap(~name, scales='free') +
+    geom_histogram() +
+    ggthemes::theme_clean() +
+    scale_fill_manual(values = viridis::viridis(4)[1:2]) + 
+    guides(fill = 'none') + 
+    labs(x=NULL, y=NULL),
+  
+  select(phys_df, id, gender, retired) |> 
+    mutate(across(2:3, as.factor)) |>
+    pivot_longer(cols = c(gender, retired)) |>
+    ggplot(aes(x=value, fill=name)) +
+    facet_wrap(~name, scales='free') +
+    geom_bar() +
+    ggthemes::theme_clean() + 
+    scale_fill_manual(values = viridis::viridis(4)[3:4]) + 
+    guides(fill = 'none') +
+    labs(x=NULL, y=NULL)
+)
+```
+
+## Data
+
+```{r}
+#| echo: false
+
+gridExtra::grid.arrange(
+  select(phys_df, id, specialty, age) |> 
+    pivot_longer(cols = c(specialty, age)) |>
+    ggplot(aes(x=value, fill=name)) +
+    facet_wrap(~name, scales='free') +
+    geom_histogram() +
+    ggthemes::theme_clean() +
+    scale_fill_manual(values = viridis::viridis(4)[1:2]) + 
+    guides(fill = 'none') + 
+    labs(x=NULL, y=NULL),
+  
+  select(phys_df, id, gender, retired) |> 
+    mutate(across(2:3, as.factor)) |>
+    pivot_longer(cols = c(gender, retired)) |>
+    ggplot(aes(x=value, fill=name)) +
+    facet_wrap(~name, scales='free') +
+    geom_bar() +
+    ggthemes::theme_clean() + 
+    scale_fill_manual(values = viridis::viridis(4)[3:4]) + 
+    guides(fill = 'none') +
+    labs(x=NULL, y=NULL)
+)
+```
+
+```{r}
+eqns = tibble(
+  model = 1:2,
+  eqn = c("retired ~ rurality + age + age2 + gender", "retired ~ rurality + age + age2 + gender + fiscal")
+)
+
+eqns$eqn
+```
+
+
+
+
+
+## Logistic
+
+```{r}
+specialties |>
+  crossing(eqns) |>
+  select(spec_id, model, eqn) |> 
+  rowwise(spec_id, model, eqn) |>
+  mutate(logit = list(
+    logistic_reg(mode = 'classification', engine = 'glm') |> 
+      fit(as.formula(eqn), data=filter(phys_df, spec_id == spec_id)))
+  )
+```
+
