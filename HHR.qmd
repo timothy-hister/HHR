@@ -12,13 +12,20 @@ execute:
   output-location: fragment
 filters:
   - fragment-shortcode.lua
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r}
-#| echo: false
+#| echo: true
 
 pacman::p_load(tidyverse, hsiaR, reactable, tidymodels)
-set.seed(123)
+set.seed(10)
+
+params = list(
+  start_year = "FY2020/21",
+  num_years_to_forecast = 10L
+)
 ```
 
 # Introduction
@@ -64,12 +71,6 @@ hsiaR::hiQuery
 hiQuery("select distinct mrspec Specialty_Code, spec_desc Specialty 
         from msea_team_lvl2.vt4 order by 1")
 ```
-
-```{r}
-#| echo: false
-tibble(spec=1:5, desc=LETTERS[1:5]) |>
-  head(5)
-```
 :::
 
 # Supply
@@ -105,25 +106,21 @@ n = 1000L
 
 phys_df = tibble(
   id = 1:n,
-  spec_id = sample(0:3, n, replace = T), 
+  spec_id = sample(specialties$spec_id, n, replace = T), 
   age = as.integer(rnorm(n, 45, 12)) |> pmax(20L),
   rurality = runif(n),
   gender = sample(c("M","F"), n, T)
 ) |>
-  crossing(i = 0:2) |>
+  crossing(i = 0:2) |> # three years of data per physician
   mutate(age = age + i) |>
-  mutate(fiscal = Vectorize(hsiaR::fiscal_add)("FY2020/21", i)) |>
+  mutate(fiscal = Vectorize(hsiaR::fiscal_add)(params$start_year, i)) |>
+  select(-i) |>
   mutate(age2 = age^2) |>
-  mutate(retired = rurality + (age + age2) + if_else(gender == "M", 10, 0) + rnorm(1, 2000, 100)) # linear combination regressors plus 'normal' noise
+  mutate(retired = rurality + (age + age2) + if_else(gender == "M", 10, 0) + rnorm(1, 2000, 100)) |> # linear combination of regressors plus 'normal' noise
+  mutate(retired = retired > quantile(retired, .9)) # 90% don't retire
   
   
-phys_df$retired = phys_df$retired > quantile(phys_df$retired, .9) # 90th percentile
-
-phys_df = phys_df |>
-  select(id, fiscal, spec_id, rurality, age, age2, gender, retired) |>
-  arrange(id, fiscal)
-
-# remove years after retirement
+# remove all years after retirement
 phys_df = phys_df |>
   anti_join(
     phys_df |>
@@ -134,15 +131,17 @@ phys_df = phys_df |>
     by=join_by(id==id, fiscal > fiscal)
 )
 
+# clean up columns and arrange
 phys_df = phys_df |>
   mutate(gender = as_factor(gender)) |>
   mutate(retired = as_factor(retired)) |>
-  mutate(fiscal = Vectorize(hsiaR::fiscal_diff)("FY2020/21", fiscal))
+  mutate(fiscal_id = Vectorize(hsiaR::fiscal_diff)(params$start_year, fiscal)) |>
+  select(id, spec_id, fiscal_id, age, age2, gender, rurality, retired) |>
+  arrange(id, fiscal_id)
 
 
 head(phys_df)
 ```
-
 
 
 ## Data
@@ -151,8 +150,8 @@ head(phys_df)
 #| eval: false
 
 gridExtra::grid.arrange(
-  select(phys_df, id, specialty, age) |> 
-    pivot_longer(cols = c(specialty, age)) |>
+  select(phys_df, id, spec_id, age) |> 
+    pivot_longer(cols = c(spec_id, age)) |>
     ggplot(aes(x=value, fill=name)) +
     facet_wrap(~name, scales='free') +
     geom_histogram() +
@@ -180,8 +179,8 @@ gridExtra::grid.arrange(
 #| echo: false
 
 gridExtra::grid.arrange(
-  select(phys_df, id, specialty, age) |> 
-    pivot_longer(cols = c(specialty, age)) |>
+  select(phys_df, id, spec_id, age) |> 
+    pivot_longer(cols = c(spec_id, age)) |>
     ggplot(aes(x=value, fill=name)) +
     facet_wrap(~name, scales='free') +
     geom_histogram() +
@@ -204,12 +203,10 @@ gridExtra::grid.arrange(
 ```
 
 ```{r}
-eqns = tibble(
-  model = 1:2,
-  eqn = c("retired ~ rurality + age + age2 + gender", "retired ~ rurality + age + age2 + gender + fiscal")
+models = tibble(
+  model_id = 1:2,
+  equation = c("retired ~ rurality + age + age2 + gender", "retired ~ rurality + age + age2 + gender + fiscal_id")
 )
-
-eqns$eqn
 ```
 
 
@@ -219,13 +216,70 @@ eqns$eqn
 ## Logistic
 
 ```{r}
-specialties |>
-  crossing(eqns) |>
-  select(spec_id, model, eqn) |> 
-  rowwise(spec_id, model, eqn) |>
-  mutate(logit = list(
-    logistic_reg(mode = 'classification', engine = 'glm') |> 
-      fit(as.formula(eqn), data=filter(phys_df, spec_id == spec_id)))
+logits = specialties |>
+  crossing(models) |>
+  select(spec_id, model_id, equation) |> 
+  rowwise(spec_id, model_id, equation) |>
+  mutate(data = list(logistic_reg(mode = 'classification', engine = 'glm') |> 
+      fit(as.formula(equation), data=filter(phys_df, spec_id == spec_id)))
   )
+
+logits = filter(logits, model_id == 1)
+```
+
+```{r}
+entrants = tibble(
+  spec_id = sample(specialties$spec_id, n/10, replace = T),
+  age = as.integer(rnorm(n/10, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
+  rurality = runif(n/10),
+  gender = sample(c("M","F"), n/10, T)
+) |>
+  nest_by(spec_id)
+```
+
+```{r}
+actuals = phys_df |>
+  nest_by(spec_id)
+```
+
+```{r}
+forecasts = actuals |>
+  mutate(data = list(
+    data |>
+      filter(fiscal_id == 2) |>
+      mutate(forecast_yr = 0, .before=1))
+  )
+
+
+x = map(forecasts$spec_id, function(spec) {
+#x = map(1:1, function(spec) {
+  results = tibble()
+  logit = filter(logits, spec_id == spec) |> pull(data) |> first()
+  df_init = forecasts |>
+      filter(spec_id == spec) |>
+      pull(data) |>
+      first() |> 
+      filter(forecast_yr == 0) |>
+      select(forecast_yr, fiscal_id, id, age, age2, gender, rurality)
+  
+  accumulate(0:params$num_years_to_forecast, function(df, h) {
+    
+    df = bind_cols(df, bind_cols(predict(logit, df, type='prob')))
+    
+    df = df |>
+      mutate(u = runif(1, 0, 1)) |>
+      mutate(retired = .pred_TRUE > u) |>
+      filter(!retired) |>
+      mutate(forecast_yr = h + 1) |>
+      mutate(age = age + 1) |>
+      mutate(age2 = age^2) |>
+      mutate(fiscal_id = fiscal_id + 1) |>
+      select(forecast_yr, fiscal_id, id, age, age2, gender, rurality)
+    
+  }, .init = df_init) |>
+    bind_rows()
+})
+
+x[[1]]$forecast_yr
 ```
 
