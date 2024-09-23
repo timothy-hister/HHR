@@ -20,12 +20,18 @@ editor_options:
 pacman::p_load(tidyverse, hsiaR, reactable, tidymodels)
 set.seed(10)
 
+specialties = tibble(
+  spec_id = 0:3,
+  spec = c("FAMILY MEDICINE", "DERMATOLOGY", "NEUROLOGY", "PSYCHIATRY")
+)
+ 
 params = list(
   start_year = "FY2020/21",
   num_years_to_forecast = 10L,
   num_years_of_data = 4L,
   num_physicians = 1000L,
-  entrants_ratio = .1
+  entrants_ratio = .05,
+  spec_weights = c(.5, .2, .2, .1)
 )
 ```
 
@@ -91,10 +97,7 @@ retirement\_prob = \beta_0 &+ \beta_1 \cdot rurality \\
 ## Specialties
 
 ```{r}
-specialties = tibble(
-  spec_id = 0:3,
-  spec = c("FAMILY MEDICINE", "DERMATOLOGY", "NEUROLOGY", "PSYCHIATRY")
-)
+
 
 specialties
 ```
@@ -105,7 +108,7 @@ specialties
 ```{r}
 phys_df = tibble(
   phys_id = 1:params$num_physicians,
-  spec_id = sample(specialties$spec_id, params$num_physicians, replace = T), 
+  spec_id = sample(specialties$spec_id, params$num_physicians, replace = T, prob = params$spec_weights), 
   age = as.integer(rnorm(params$num_physicians, 45, 12)) |> pmax(20L),
   rurality = runif(params$num_physicians),
   gender = sample(c("M","F"), params$num_physicians, T) # assume two genders for simplicity
@@ -238,10 +241,10 @@ logits$data[[1]]
 
 ```{r}
 entrants = tibble(
-  spec_id = sample(specialties$spec_id, params$num_entrants, replace = T),
-  age = as.integer(rnorm(params$num_entrants, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
-  rurality = runif(params$num_entrants),
-  gender = as_factor(sample(c("M","F"), params$num_entrants, T))
+  spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
+  age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
+  rurality = runif(params$num_physicians * params$entrants_ratio),
+  gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T))
 ) |>
   nest_by(spec_id)
 
@@ -307,7 +310,9 @@ all_data = bind_rows(
 
 ```{r}
 all_data |>
-  group_by(spec_id, fiscal_id, fiscal, is_forecast) |>
+  inner_join(specialties) |>
+  mutate(spec = fct(spec)) |>
+  group_by(spec, fiscal_id, fiscal, is_forecast) |>
   summarise(
     n = n(),
     retired = sum(retired),
@@ -316,8 +321,8 @@ all_data |>
   pivot_longer(cols=c(n, retired, entered)) |>
   mutate(name = fct(name)) |>
   mutate(fiscal = fct(fiscal)) |>
-  ggplot(aes(x=fiscal, y=value, color=name, group=interaction(spec_id, name))) +
-  facet_wrap(~spec_id, scales='free') +
+  ggplot(aes(x=fiscal, y=value, color=name, group=interaction(spec, name))) +
+  facet_wrap(~spec, scales='free') +
   geom_line(data = ~filter(., !is_forecast)) +
   geom_line(data = ~filter(., is_forecast), linetype = "dashed") +
   geom_point() +
@@ -325,6 +330,6 @@ all_data |>
   scale_color_viridis_d(option = "C") +
   theme(legend.position = 'bottom') +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(color=NULL)
+  labs(color=NULL, x=NULL, y=NULL)
 ```
 
