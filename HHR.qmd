@@ -244,6 +244,20 @@ calc_entrants = function(df, h) {
     mutate(entered = T) |>
     mutate(retired = F)
 }
+
+# simulates the progression of the workforce for one year
+simulate_one_year = function(df, logit, entrants, h) {
+  df = df |> filter(!retired)
+    df$entered = F
+    retired_idx = calc_retirements(df, logit_spec)
+    df$retired[retired_idx] = T
+    df$age = df$age + 1
+    entrants = calc_entrants(entrants_spec, h)
+    df = bind_rows(df, entrants)
+    df$fiscal_id = params$num_years_of_data + h - 1
+    return(df)
+}
+
 ```
 
 ## Logistic Models
@@ -306,26 +320,24 @@ logits
 ```{r}
 #| code-line-numbers: "|2|11|14,17|16"
 
-forecasts = actuals
-forecasts$data = map(actuals$spec_id, function(spec) {
-  logit = filter(logits, spec_id == spec) |> pull(data) |> first()
-  df_init = actuals |>
-      filter(spec_id == spec) |>
-      pull(data) |>
-      first() |> 
+#forecasts = actuals
+actuals |>
+  inner_join(logits, by='spec_id') |>
+  inner_join(entrants, by='spec_id') |>
+  apply(1, function(row) {
+  browser()
+  logit_spec = filter(logits, spec_id == spec) |> pull(data) |> first()
+  #df_init = actuals |>
+  df_init = row$data.x |>
+      #filter(spec_id == spec) |>
+      #pull(data) |>
+      #first() |> 
       filter(fiscal_id == (params$num_years_of_data - 1))
   entrants_spec = entrants_all |> filter(spec_id == spec) |> pull(data) |> first()
   
   accumulate(1:params$num_years_to_forecast, function(df, h) {
-    df = df |> filter(!retired)
-    df$entered = F
-    retired_idx = calc_retirements(df, logit)
-    df$retired[retired_idx] = T
-    df$age = df$age + 1
-    entrants = calc_entrants(entrants_spec, h)
-    df = bind_rows(df, entrants)
-    df$fiscal_id = params$num_years_of_data + h - 1
-    return(df)
+    browser()
+    simulate_one_year(df, logit_spec, entrants_spec, h)
   }, .init = df_init) |>
     bind_rows() |>
     filter(fiscal_id >= params$num_years_of_data) |>
