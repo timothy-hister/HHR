@@ -189,27 +189,46 @@ gridExtra::grid.arrange(
 )
 ```
 
+## (Fake) Entrants Data Set
+
+```{r}
+fake_entrants = tibble(
+  phys_id = 1:(params$num_physicians * params$entrants_ratio),
+  spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
+  age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
+  rurality = runif(params$num_physicians * params$entrants_ratio),
+  gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T)),
+  entered = T,
+  retired = F
+)
+```
+
+## Add (Fake) Entrants to (Fake) Data
+
+```{r}
+fake_data = bind_rows(
+  fake_data,
+  fake_data |>
+  select(spec_id, fiscal_id) |>
+  arrange(spec_id, fiscal_id) |>
+  unique() |>
+  full_join(fake_entrants, by='spec_id', relationship = 'many-to-many') |>
+  mutate(phys_id = -(fiscal_id + 1) * 1000 * phys_id)
+)
+```
+
 ## Nested Data
 
 ```{r}
-#| code-line-numbers: "|2"
+#| code-line-numbers: "|2,5"
 
 actuals = fake_data |>
   nest_by(spec_id, .key = "actuals")
 
-actuals
-```
-
-## (Fake) Entrants Data Set
-
-```{r}
-entrants = tibble(
-  spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
-  age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
-  rurality = runif(params$num_physicians * params$entrants_ratio),
-  gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T))
-) |>
+entrants = fake_entrants |>
   nest_by(spec_id, .key = 'entrants')
+
+actuals
 ```
 
 ## (Fake) Entrants Data Set
@@ -249,15 +268,14 @@ calc_entrants = function(df, h) {
 simulate_one_year = function(actuals_df, logit, entrants_df, h) {
   actuals_df = actuals_df |> filter(!retired)
   actuals_df$entered = F
+  actuals_df$age = actuals_df$age + 1
   retired_idx = calc_retirements(actuals_df, logit)
   actuals_df$retired[retired_idx] = T
-  actuals_df$age = actuals_df$age + 1
   entrants_df_with_id = calc_entrants(entrants_df, h)
   actuals_df = bind_rows(actuals_df, entrants_df_with_id)
   actuals_df$fiscal_id = params$num_years_of_data + h - 1
   return(actuals_df)
 }
-
 ```
 
 ## Logistic Models
@@ -311,7 +329,7 @@ logits = actuals |>
   select(spec_id, model_id, equation, actuals) |>
   mutate(logit = list(calc_logit(first(actuals), equation))) |>
   select(spec_id, model_id, logit) |>
-  nest_by(c(spec_id, model_id), .key='logit')
+  rowwise(spec_id, model_id)
 
 logits
 ```
@@ -328,7 +346,7 @@ forecasts$forecasts = actuals |>
   
   apply(1, function(row) {
     actuals_init = row$actuals |> filter(fiscal_id == (params$num_years_of_data - 1))
-  
+    
     accumulate(1:params$num_years_to_forecast, function(actuals_df, h) {
       actuals_df = simulate_one_year(actuals_df, row$logit, row$entrants, h)
     }, .init = actuals_init) |>
@@ -434,5 +452,11 @@ result |>
       if (result[[index, 'is_forecast']]) list(backgroundColor = 'lightyellow')
     })
   )
+```
+
+
+
+```{r}
+
 ```
 
