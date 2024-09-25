@@ -195,7 +195,7 @@ gridExtra::grid.arrange(
 #| code-line-numbers: "|2"
 
 actuals = fake_data |>
-  nest_by(spec_id)
+  nest_by(spec_id, .key = "actuals")
 
 actuals
 ```
@@ -203,22 +203,22 @@ actuals
 ## (Fake) Entrants Data Set
 
 ```{r}
-entrants_all = tibble(
+entrants = tibble(
   spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
   age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
   rurality = runif(params$num_physicians * params$entrants_ratio),
   gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T))
 ) |>
-  nest_by(spec_id)
+  nest_by(spec_id, .key = 'entrants')
 ```
 
 ## (Fake) Entrants Data Set
 
 ```{r}
-entrants_all
+entrants
 ```
 
-## Three Functions
+## Four Functions
 
 ```{r}
 #| code-line-numbers: "|2,9,16"
@@ -230,14 +230,14 @@ calc_logit = function(df, equation) {
     fit(as.formula(equation), data=df)
 }
 
-# returns a vector of predictions
+# returns a vector of predictions of retirement
 calc_retirements = function(df, logit) {
   preds = predict(logit, df, type='prob')
   preds$u = runif(nrow(preds))
   return(preds$.pred_TRUE > preds$u)
 }  
 
-# returns a dataframe of entrants
+# returns a dataframe of entrants (with made up phys id numbers)
 calc_entrants = function(df, h) {
   df |>
     mutate(phys_id = row_number() + (h * 1000)) |>
@@ -246,16 +246,16 @@ calc_entrants = function(df, h) {
 }
 
 # simulates the progression of the workforce for one year
-simulate_one_year = function(df, logit, entrants, h) {
-  df = df |> filter(!retired)
-    df$entered = F
-    retired_idx = calc_retirements(df, logit_spec)
-    df$retired[retired_idx] = T
-    df$age = df$age + 1
-    entrants = calc_entrants(entrants_spec, h)
-    df = bind_rows(df, entrants)
-    df$fiscal_id = params$num_years_of_data + h - 1
-    return(df)
+simulate_one_year = function(actuals_df, logit, entrants_df, h) {
+  actuals_df = actuals_df |> filter(!retired)
+  actuals_df$entered = F
+  retired_idx = calc_retirements(actuals_df, logit)
+  actuals_df$retired[retired_idx] = T
+  actuals_df$age = actuals_df$age + 1
+  entrants_df_with_id = calc_entrants(entrants_df, h)
+  actuals_df = bind_rows(actuals_df, entrants_df_with_id)
+  actuals_df$fiscal_id = params$num_years_of_data + h - 1
+  return(actuals_df)
 }
 
 ```
@@ -308,9 +308,10 @@ models
 
 logits = actuals |>
   crossing(models) |>
-  rename(actuals = data) |>
-  mutate(data = list(calc_logit(first(actuals), equation))) |>
-  select(-actuals, -equation)
+  select(spec_id, model_id, equation, actuals) |>
+  mutate(logit = list(calc_logit(first(actuals), equation))) |>
+  select(spec_id, model_id, logit) |>
+  nest_by(c(spec_id, model_id), .key='logit')
 
 logits
 ```
@@ -320,28 +321,20 @@ logits
 ```{r}
 #| code-line-numbers: "|2|11|14,17|16"
 
-#forecasts = actuals
-actuals |>
-  inner_join(logits, by='spec_id') |>
-  inner_join(entrants, by='spec_id') |>
-  apply(1, function(row) {
-  browser()
-  logit_spec = filter(logits, spec_id == spec) |> pull(data) |> first()
-  #df_init = actuals |>
-  df_init = row$data.x |>
-      #filter(spec_id == spec) |>
-      #pull(data) |>
-      #first() |> 
-      filter(fiscal_id == (params$num_years_of_data - 1))
-  entrants_spec = entrants_all |> filter(spec_id == spec) |> pull(data) |> first()
+forecasts = specialties |> select(spec_id)
+forecasts$forecasts = actuals |>
+  inner_join(logits) |>
+  inner_join(entrants) |>
   
-  accumulate(1:params$num_years_to_forecast, function(df, h) {
-    browser()
-    simulate_one_year(df, logit_spec, entrants_spec, h)
-  }, .init = df_init) |>
-    bind_rows() |>
-    filter(fiscal_id >= params$num_years_of_data) |>
-    arrange(phys_id, fiscal_id)
+  apply(1, function(row) {
+    actuals_init = row$actuals |> filter(fiscal_id == (params$num_years_of_data - 1))
+  
+    accumulate(1:params$num_years_to_forecast, function(actuals_df, h) {
+      actuals_df = simulate_one_year(actuals_df, row$logit, row$entrants, h)
+    }, .init = actuals_init) |>
+      bind_rows() |>
+      filter(fiscal_id >= params$num_years_of_data) |>
+      arrange(phys_id, fiscal_id)
 })
 ```
 
@@ -349,8 +342,8 @@ actuals |>
 
 ```{r}
 result = bind_rows(
-  actuals |> unnest(data) |> mutate(is_forecast = F),
-  forecasts |> unnest(data) |> mutate(is_forecast = T)
+  actuals |> unnest(actuals) |> mutate(is_forecast = F),
+  forecasts |> unnest(forecasts) |> mutate(is_forecast = T)
 ) |>
   arrange(spec_id, phys_id, fiscal_id) |>
   mutate(fiscal = Vectorize(hsiaR::fiscal_add)(params$start_year, fiscal_id)) |>
