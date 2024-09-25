@@ -1,0 +1,26 @@
+/* Target the Reactable container */
+.Reactable {
+  font-size: 14px; /* Adjust this value as needed */
+  color: #333; /* Set a specific color for the text */
+}
+
+/* Target the Reactable table */
+.Reactable .rt-table {
+  color: inherit;
+}
+
+/* Target the table header */
+.Reactable .rt-thead {
+  background-color: #f0f0f0; /* Light gray background */
+  color: #000; /* Black text for headers */
+}
+
+/* Target table cells */
+.Reactable .rt-td {
+  color: inherit;
+}
+
+/* Ensure Reactable's width is 100% of its container */
+.Reactable .ReactTable {
+  width: 100% !important;
+}
