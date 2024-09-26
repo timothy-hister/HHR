@@ -58,9 +58,9 @@ editor_options:
 
 ![](images/clipboard-3863693993.png){height="300" .fragment}
 
-<br>
 
--   Not public! (For today: fake data set)
+
+-   Not public!
 
 # The Model
 
@@ -70,7 +70,7 @@ editor_options:
 
 ```{r}
 #| code-line-numbers: "5-6|10-15"
-pacman::p_load(tidyverse, reactable, tidymodels)
+pacman::p_load(tidyverse, tidymodels, reactable)
 set.seed(10)
 
 specialties = tibble(
@@ -82,13 +82,27 @@ params = list(
   start_year = "FY2020/21",
   num_years_to_forecast = 10L,
   num_years_of_data = 4L,
-  num_physicians = 1000L,
-  entrants_ratio = .05, # proportion of total physicians that enter
-  spec_weights = c(.5, .2, .2, .1) # family medicine is 50% of total workforce, etc.
+  num_physicians = 8000L,
+  retirement_percentage = 0.1, 
+  entrants_ratio = .05,
+  spec_weights = c(.6, .1, .1, .2),
+  retirement_random_eqn = expr(rurality + age + age^2 + if_else(gender == "M", 10, 0) + rnorm(params$num_physicians, 0, 200))
 )
 ```
 
-## (Fake) Data Set
+## Fiscals
+
+```{r}
+fiscals = tibble(
+  fiscal_id = 1:(params$num_years_of_data + params$num_years_to_forecast),
+  fiscal = paste0("FY", as.integer(substr(params$start_year, 3, 6)) + fiscal_id - 1, "/", as.integer(substr(params$start_year, 8, 10)) + fiscal_id - 1)
+)
+
+fiscals
+```
+
+
+## (Fake) Physician Data
 
 ```{r}
 fake_data = tibble(
@@ -96,43 +110,68 @@ fake_data = tibble(
   spec_id = sample(specialties$spec_id, params$num_physicians, replace = T, prob = params$spec_weights), 
   age = as.integer(rnorm(params$num_physicians, 45, 12)) |> pmax(20L),
   rurality = runif(params$num_physicians),
-  gender = sample(c("M","F"), params$num_physicians, T) # assume two genders for simplicity
+  gender = as_factor(sample(c("M","F"), params$num_physicians, T)) # assume two genders for simplicity
 ) |>
-  crossing(i = 1:params$num_years_of_data) |>
-  mutate(age = age + i-1) |>
-  mutate(fiscal = Vectorize(hsiaR::fiscal_add)(params$start_year, i-1)) |>
-  select(-i) |>
+  crossing(fiscal_id = 1:params$num_years_of_data) |>
+  mutate(age = age + fiscal_id - 1) |>
   mutate(entered = F) |>
-  mutate(retired = rurality + age + age^2 + if_else(gender == "M", 10, 0) + rnorm(1, 0, 500)) |> # linear combination of regressors plus 'normal' noise
-  mutate(retired = retired > quantile(retired, .9)) # 90% don't retire
-  
+  mutate(retirement_score = -10 + 0.2 * age + 0.002 * age^2 + 2 * rurality + if_else(gender == "M", 0.5, 0) + rnorm(n(), 0, 2)) |>
+  mutate(retirement_prob = 1 - (1 / (1 + exp(-retirement_score)))) |>
+  mutate(retired = rbinom(n(), 1, retirement_prob)) |>
+  mutate(retired = as.logical(retired)) |>
+  select(-retirement_prob, -retirement_score)
   
 # remove all years after retirement
 fake_data = fake_data |>
   anti_join(
     fake_data |>
       filter(retired) |>
-      arrange(phys_id, fiscal) |>
+      arrange(phys_id, fiscal_id) |>
       group_by(phys_id) |>
       slice_head(n=1),
-    by=join_by(phys_id==phys_id, fiscal > fiscal)
+    by=join_by(phys_id==phys_id, fiscal_id > fiscal_id)
 )
-
-# clean up columns and arrange
-fake_data = fake_data |>
-  mutate(gender = as_factor(gender)) |>
-  mutate(fiscal_id = Vectorize(hsiaR::fiscal_diff)(params$start_year, fiscal)) |>
-  select(phys_id, spec_id, fiscal_id, age, gender, rurality, entered, retired) |>
-  arrange(phys_id, fiscal_id)
 ```
 
-## (Fake) Data Set
+## (Fake) Entrants Data
+
+```{r}
+fake_entrants = tibble(
+  phys_id = (1:(params$num_physicians * params$entrants_ratio)) + params$num_physicians,
+  spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
+  age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
+  rurality = runif(params$num_physicians * params$entrants_ratio),
+  gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T)),
+  entered = T,
+  retired = F
+)
+```
+
+## Add (Fake) Entrants to (Fake) Data
+
+```{r}
+fake_data = bind_rows(
+  fake_data,
+  fake_data |>
+    select(spec_id, fiscal_id) |>
+    arrange(spec_id, fiscal_id) |>
+    unique() |>
+    full_join(
+      fake_entrants |>
+        crossing(fiscal_id = 1:params$num_years_of_data) |>
+        mutate(age = age + fiscal_id - 1)
+      , by=c('spec_id', 'fiscal_id'), relationship = 'many-to-many')
+) |>
+  arrange(spec_id, fiscal_id)
+```
+
+## Data
 
 ```{r}
 fake_data
 ```
 
-## Data Visualization
+## Visualization
 
 ```{r}
 #| eval: false
@@ -189,38 +228,10 @@ gridExtra::grid.arrange(
 )
 ```
 
-## (Fake) Entrants Data Set
-
-```{r}
-fake_entrants = tibble(
-  phys_id = 1:(params$num_physicians * params$entrants_ratio),
-  spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
-  age = as.integer(rnorm(params$num_physicians * params$entrants_ratio, 35, 12)) |> pmax(20L), # a bit younger than the previous pool
-  rurality = runif(params$num_physicians * params$entrants_ratio),
-  gender = as_factor(sample(c("M","F"), params$num_physicians * params$entrants_ratio, T)),
-  entered = T,
-  retired = F
-)
-```
-
-## Add (Fake) Entrants to (Fake) Data
-
-```{r}
-fake_data = bind_rows(
-  fake_data,
-  fake_data |>
-  select(spec_id, fiscal_id) |>
-  arrange(spec_id, fiscal_id) |>
-  unique() |>
-  full_join(fake_entrants, by='spec_id', relationship = 'many-to-many') |>
-  mutate(phys_id = -(fiscal_id + 1) * 1000 * phys_id)
-)
-```
-
 ## Nested Data
 
 ```{r}
-#| code-line-numbers: "|2,5"
+#| code-line-numbers: "2,5"
 
 actuals = fake_data |>
   nest_by(spec_id, .key = "actuals")
@@ -231,17 +242,9 @@ entrants = fake_entrants |>
 actuals
 ```
 
-## (Fake) Entrants Data Set
-
-```{r}
-entrants
-```
-
 ## Four Functions
 
 ```{r}
-#| code-line-numbers: "|2,9,16"
-
 # returns a logistic object
 calc_logit = function(df, equation) {
   df = df |> mutate(retired = as_factor(retired))
@@ -273,41 +276,54 @@ simulate_one_year = function(actuals_df, logit, entrants_df, h) {
   actuals_df$retired[retired_idx] = T
   entrants_df_with_id = calc_entrants(entrants_df, h)
   actuals_df = bind_rows(actuals_df, entrants_df_with_id)
-  actuals_df$fiscal_id = params$num_years_of_data + h - 1
+  actuals_df$fiscal_id = params$num_years_of_data + h
   return(actuals_df)
 }
 ```
 
+# Logistic Regression
+
 ## Logistic Models
 
 ```{r}
+#| code-line-numbers: "|4-5"
 models_all = tibble(
   model_id = 1:2,
   equation = c(
     "retired ~ age", 
-    "retired ~ age + I(age^2) + gender + rurality + fiscal_id")
+    "retired ~ rurality + age + I(age^2) + gender")
 )
 ```
 
 ## Model Selection
 
+```{r}
+split = initial_split(filter(fake_data, !entered), prop = 0.8)
+train = training(split)
+test = testing(split)
+```
+
 ::: fragment
 ```{r}
-#| code-line-numbers: "1-3|4|5|6-8|10"
-accuracy = models_all |>
-  crossing(fake_data) |>
-  nest_by(model_id, equation) |>
-  mutate(logit = list(calc_logit(data, equation))) |>
-  mutate(pred_retired = list(calc_retirements(data, logit))) |>
-  mutate(retired = list(data$retired)) |>
-  mutate(accurate = list(pred_retired == retired)) |>
-  mutate(accuracy = mean(accurate))
+# accuracy = models_all |>
+#   rowwise(model_id, equation) |>
+#   mutate(logit = list(calc_logit(train, equation))) |>
+#   mutate(pred_retired = list(calc_retirements(train, logit))) |>
+#   mutate(is_accurate = list(pred_retired == test$retired)) |>
+#   mutate(accuracy = mean(is_accurate))
+# 
+# accuracy
 
-accuracy
+
+accuracy = models_all |>
+  rowwise(model_id, equation) |>
+  mutate(logit = list(calc_logit(filter(fake_data, !entered), equation))) |>
+  mutate(pred_retired = list(calc_retirements(filter(fake_data, !entered), logit))) |>
+  mutate(is_accurate = list(pred_retired == filter(fake_data, !entered)$retired)) |>
+  mutate(accuracy = mean(is_accurate))
 ```
 :::
 
-<br>
 
 -   **Model #2 (barely) beats Model #1!**
 
@@ -327,31 +343,32 @@ models
 logits = actuals |>
   crossing(models) |>
   select(spec_id, model_id, equation, actuals) |>
-  mutate(logit = list(calc_logit(first(actuals), equation))) |>
-  select(spec_id, model_id, logit) |>
-  rowwise(spec_id, model_id)
-
+  rowwise(spec_id, model_id, equation) |>
+  mutate(logit = list(calc_logit(actuals, equation))) |>
+  select(logit)
+  
 logits
 ```
 
 ## Simulation
 
 ```{r}
-#| code-line-numbers: "|2|11|14,17|16"
+#| code-line-numbers: "|9|1-2|"
 
 forecasts = specialties |> select(spec_id)
+
 forecasts$forecasts = actuals |>
   inner_join(logits) |>
   inner_join(entrants) |>
   
   apply(1, function(row) {
-    actuals_init = row$actuals |> filter(fiscal_id == (params$num_years_of_data - 1))
+    actuals_init = row$actuals |> filter(fiscal_id == (params$num_years_of_data))
     
     accumulate(1:params$num_years_to_forecast, function(actuals_df, h) {
       actuals_df = simulate_one_year(actuals_df, row$logit, row$entrants, h)
     }, .init = actuals_init) |>
       bind_rows() |>
-      filter(fiscal_id >= params$num_years_of_data) |>
+      filter(fiscal_id >= params$num_years_of_data + 1) |>
       arrange(phys_id, fiscal_id)
 })
 ```
@@ -363,8 +380,9 @@ result = bind_rows(
   actuals |> unnest(actuals) |> mutate(is_forecast = F),
   forecasts |> unnest(forecasts) |> mutate(is_forecast = T)
 ) |>
+  filter(fiscal_id > 1) |>
   arrange(spec_id, phys_id, fiscal_id) |>
-  mutate(fiscal = Vectorize(hsiaR::fiscal_add)(params$start_year, fiscal_id)) |>
+  inner_join(fiscals) |>
   select(-fiscal_id) |>
   inner_join(specialties) |>
   mutate(spec = fct(spec)) |>
@@ -416,6 +434,31 @@ result |>
   labs(color=NULL, x=NULL, y=NULL)
 ```
 
+## Net Change
+
+```{r}
+#| echo: false
+result |>
+  select(-headcount) |>
+  mutate(retired = -retired) |>
+  pivot_longer(cols=c(retired, entered)) |>
+  mutate(name = fct(name)) |>
+  mutate(fiscal = fct(fiscal)) |>
+  ggplot(aes(x=fiscal, y=value, fill=name, group=interaction(spec, name))) +
+  facet_wrap(~spec, scales='free') +
+  geom_col(data = ~filter(., !is_forecast), alpha = .2) +
+  geom_col(data = ~filter(., is_forecast)) +
+  ggthemes::theme_clean() +
+  scale_fill_viridis_d(option = "C") +
+  theme(legend.position = 'bottom') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(fill=NULL, x=NULL, y=NULL)
+
+
+
+```
+
+
 ## Result (Table)
 
 ```{r}
@@ -453,10 +496,3 @@ result |>
     })
   )
 ```
-
-
-
-```{r}
-
-```
-

@@ -11,7 +11,7 @@
   <meta name="generator" content="quarto-1.5.57">
 
   <meta name="author" content="Tim Hister">
-  <meta name="dcterms.date" content="2024-09-24">
+  <meta name="dcterms.date" content="2024-09-25">
   <title>Health Human Resources Supply and Demand Forecasting</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -420,7 +420,7 @@ Tim Hister
 </div>
 </div>
 
-  <p class="date">2024-09-24</p>
+  <p class="date">2024-09-25</p>
 </section>
 <section>
 <section id="introduction" class="title-slide slide level1 center">
@@ -465,9 +465,8 @@ Tim Hister
 <li class="fragment"><a href="https://www2.gov.bc.ca/gov/content/health/conducting-health-research-evaluation/data-access-health-data-central/health-sector-partner-access-to-data/third-party-access">Ministry of Health datasets</a>, such as <a href="https://healthdataplatformbc.ca/hdpbc-data">MSP</a>.</li>
 </ul>
 <p><img data-src="images/clipboard-3863693993.png" class="fragment" height="300"></p>
-<p><br></p>
 <ul>
-<li class="fragment">Not public! (For today: fake data set)</li>
+<li class="fragment">Not public!</li>
 </ul>
 </section></section>
 <section>
@@ -481,7 +480,7 @@ Tim Hister
 <section id="set-up-parameters" class="slide level2">
 <h2>Set Up &amp; Parameters</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb1" data-code-line-numbers="5-6|10-15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href=""></a>pacman<span class="sc">::</span><span class="fu">p_load</span>(tidyverse, reactable, tidymodels)</span>
+<div class="sourceCode cell-code" id="cb1" data-code-line-numbers="5-6|10-15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href=""></a>pacman<span class="sc">::</span><span class="fu">p_load</span>(tidyverse, tidymodels, reactable)</span>
 <span id="cb1-2"><a href=""></a><span class="fu">set.seed</span>(<span class="dv">10</span>)</span>
 <span id="cb1-3"><a href=""></a></span>
 <span id="cb1-4"><a href=""></a>specialties <span class="ot">=</span> <span class="fu">tibble</span>(</span>
@@ -495,12 +494,13 @@ Tim Hister
 <span id="cb1-12"><a href=""></a>  <span class="at">num_years_of_data =</span> <span class="dv">4</span>L,</span>
 <span id="cb1-13"><a href=""></a>  <span class="at">num_physicians =</span> <span class="dv">1000</span>L,</span>
 <span id="cb1-14"><a href=""></a>  <span class="at">entrants_ratio =</span> .<span class="dv">05</span>, <span class="co"># proportion of total physicians that enter</span></span>
-<span id="cb1-15"><a href=""></a>  <span class="at">spec_weights =</span> <span class="fu">c</span>(.<span class="dv">5</span>, .<span class="dv">2</span>, .<span class="dv">2</span>, .<span class="dv">1</span>) <span class="co"># family medicine is 50% of total workforce, etc.</span></span>
-<span id="cb1-16"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-15"><a href=""></a>  <span class="at">spec_weights =</span> <span class="fu">c</span>(.<span class="dv">5</span>, .<span class="dv">2</span>, .<span class="dv">2</span>, .<span class="dv">1</span>), <span class="co"># family medicine is 50% of total workforce, etc.</span></span>
+<span id="cb1-16"><a href=""></a>  <span class="at">retirement_random_eqn =</span> <span class="fu">expr</span>(rurality <span class="sc">+</span> age <span class="sc">+</span> age<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> <span class="fu">if_else</span>(gender <span class="sc">==</span> <span class="st">"M"</span>, <span class="dv">5</span>, <span class="dv">0</span>) <span class="sc">+</span> <span class="fu">rnorm</span>(params<span class="sc">$</span>num_physicians, <span class="dv">0</span>, <span class="dv">50</span>))</span>
+<span id="cb1-17"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
-<section id="fake-data-set" class="slide level2">
-<h2>(Fake) Data Set</h2>
+<section id="fake-physician-data" class="slide level2">
+<h2>(Fake) Physician Data</h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href=""></a>fake_data <span class="ot">=</span> <span class="fu">tibble</span>(</span>
 <span id="cb2-2"><a href=""></a>  <span class="at">phys_id =</span> <span class="dv">1</span><span class="sc">:</span>params<span class="sc">$</span>num_physicians,</span>
@@ -514,7 +514,7 @@ Tim Hister
 <span id="cb2-10"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">fiscal =</span> <span class="fu">Vectorize</span>(hsiaR<span class="sc">::</span>fiscal_add)(params<span class="sc">$</span>start_year, i<span class="dv">-1</span>)) <span class="sc">|&gt;</span></span>
 <span id="cb2-11"><a href=""></a>  <span class="fu">select</span>(<span class="sc">-</span>i) <span class="sc">|&gt;</span></span>
 <span id="cb2-12"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">entered =</span> F) <span class="sc">|&gt;</span></span>
-<span id="cb2-13"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">retired =</span> rurality <span class="sc">+</span> age <span class="sc">+</span> age<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> <span class="fu">if_else</span>(gender <span class="sc">==</span> <span class="st">"M"</span>, <span class="dv">10</span>, <span class="dv">0</span>) <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, <span class="dv">500</span>)) <span class="sc">|&gt;</span> <span class="co"># linear combination of regressors plus 'normal' noise</span></span>
+<span id="cb2-13"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">retired =</span>  <span class="fu">eval</span>(params<span class="sc">$</span>retirement_random_eqn)) <span class="sc">|&gt;</span> </span>
 <span id="cb2-14"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">retired =</span> retired <span class="sc">&gt;</span> <span class="fu">quantile</span>(retired, .<span class="dv">9</span>)) <span class="co"># 90% don't retire</span></span>
 <span id="cb2-15"><a href=""></a>  </span>
 <span id="cb2-16"><a href=""></a>  </span>
@@ -537,14 +537,42 @@ Tim Hister
 <span id="cb2-33"><a href=""></a>  <span class="fu">arrange</span>(phys_id, fiscal_id)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
-<section id="fake-data-set-1" class="slide level2">
-<h2>(Fake) Data Set</h2>
+<section id="fake-entrants-data" class="slide level2">
+<h2>(Fake) Entrants Data</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href=""></a>fake_data</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href=""></a>fake_entrants <span class="ot">=</span> <span class="fu">tibble</span>(</span>
+<span id="cb3-2"><a href=""></a>  <span class="at">phys_id =</span> <span class="dv">1</span><span class="sc">:</span>(params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio),</span>
+<span id="cb3-3"><a href=""></a>  <span class="at">spec_id =</span> <span class="fu">sample</span>(specialties<span class="sc">$</span>spec_id, params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, <span class="at">replace =</span> T, params<span class="sc">$</span>spec_weights),</span>
+<span id="cb3-4"><a href=""></a>  <span class="at">age =</span> <span class="fu">as.integer</span>(<span class="fu">rnorm</span>(params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, <span class="dv">35</span>, <span class="dv">12</span>)) <span class="sc">|&gt;</span> <span class="fu">pmax</span>(<span class="dv">20</span>L), <span class="co"># a bit younger than the previous pool</span></span>
+<span id="cb3-5"><a href=""></a>  <span class="at">rurality =</span> <span class="fu">runif</span>(params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio),</span>
+<span id="cb3-6"><a href=""></a>  <span class="at">gender =</span> <span class="fu">as_factor</span>(<span class="fu">sample</span>(<span class="fu">c</span>(<span class="st">"M"</span>,<span class="st">"F"</span>), params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, T)),</span>
+<span id="cb3-7"><a href=""></a>  <span class="at">entered =</span> T,</span>
+<span id="cb3-8"><a href=""></a>  <span class="at">retired =</span> F</span>
+<span id="cb3-9"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="add-fake-entrants-to-fake-data" class="slide level2">
+<h2>Add (Fake) Entrants to (Fake) Data</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href=""></a>fake_data <span class="ot">=</span> <span class="fu">bind_rows</span>(</span>
+<span id="cb4-2"><a href=""></a>  fake_data,</span>
+<span id="cb4-3"><a href=""></a>  fake_data <span class="sc">|&gt;</span></span>
+<span id="cb4-4"><a href=""></a>  <span class="fu">select</span>(spec_id, fiscal_id) <span class="sc">|&gt;</span></span>
+<span id="cb4-5"><a href=""></a>  <span class="fu">arrange</span>(spec_id, fiscal_id) <span class="sc">|&gt;</span></span>
+<span id="cb4-6"><a href=""></a>  <span class="fu">unique</span>() <span class="sc">|&gt;</span></span>
+<span id="cb4-7"><a href=""></a>  <span class="fu">full_join</span>(fake_entrants, <span class="at">by=</span><span class="st">'spec_id'</span>, <span class="at">relationship =</span> <span class="st">'many-to-many'</span>) <span class="sc">|&gt;</span></span>
+<span id="cb4-8"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">phys_id =</span> <span class="sc">-</span>(fiscal_id <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">*</span> <span class="dv">1000</span> <span class="sc">*</span> phys_id)</span>
+<span id="cb4-9"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="data-1" class="slide level2">
+<h2>Data</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href=""></a>fake_data</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 3,731 × 8
+<pre><code># A tibble: 3,927 × 8
    phys_id spec_id fiscal_id   age gender rurality entered retired
-     &lt;int&gt;   &lt;int&gt;     &lt;int&gt; &lt;dbl&gt; &lt;fct&gt;     &lt;dbl&gt; &lt;lgl&gt;   &lt;lgl&gt;  
+     &lt;dbl&gt;   &lt;int&gt;     &lt;int&gt; &lt;dbl&gt; &lt;fct&gt;     &lt;dbl&gt; &lt;lgl&gt;   &lt;lgl&gt;  
  1       1       2         0    55 M         0.614 FALSE   FALSE  
  2       1       2         1    56 M         0.614 FALSE   FALSE  
  3       1       2         2    57 M         0.614 FALSE   FALSE  
@@ -555,149 +583,134 @@ Tim Hister
  8       2       0         3    39 F         0.107 FALSE   FALSE  
  9       3       0         0    47 M         0.519 FALSE   FALSE  
 10       3       0         1    48 M         0.519 FALSE   FALSE  
-# ℹ 3,721 more rows</code></pre>
+# ℹ 3,917 more rows</code></pre>
 </div>
+</div>
+</section>
+<section id="visualization" class="slide level2">
+<h2>Visualization</h2>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href=""></a>gridExtra<span class="sc">::</span><span class="fu">grid.arrange</span>(</span>
+<span id="cb7-2"><a href=""></a>  <span class="fu">select</span>(fake_data, phys_id, spec_id, age) <span class="sc">|&gt;</span> </span>
+<span id="cb7-3"><a href=""></a>    <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">c</span>(spec_id, age)) <span class="sc">|&gt;</span></span>
+<span id="cb7-4"><a href=""></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">fill=</span>name)) <span class="sc">+</span></span>
+<span id="cb7-5"><a href=""></a>    <span class="fu">facet_wrap</span>(<span class="sc">~</span>name, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
+<span id="cb7-6"><a href=""></a>    <span class="fu">geom_histogram</span>() <span class="sc">+</span></span>
+<span id="cb7-7"><a href=""></a>    ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span></span>
+<span id="cb7-8"><a href=""></a>    <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> viridis<span class="sc">::</span><span class="fu">viridis</span>(<span class="dv">4</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]) <span class="sc">+</span> </span>
+<span id="cb7-9"><a href=""></a>    <span class="fu">guides</span>(<span class="at">fill =</span> <span class="st">'none'</span>) <span class="sc">+</span> </span>
+<span id="cb7-10"><a href=""></a>    <span class="fu">labs</span>(<span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>),</span>
+<span id="cb7-11"><a href=""></a>  <span class="fu">select</span>(fake_data, phys_id, gender, retired) <span class="sc">|&gt;</span> </span>
+<span id="cb7-12"><a href=""></a>    <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>, as.factor)) <span class="sc">|&gt;</span></span>
+<span id="cb7-13"><a href=""></a>    <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">c</span>(gender, retired)) <span class="sc">|&gt;</span></span>
+<span id="cb7-14"><a href=""></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">fill=</span>name)) <span class="sc">+</span></span>
+<span id="cb7-15"><a href=""></a>    <span class="fu">facet_wrap</span>(<span class="sc">~</span>name, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
+<span id="cb7-16"><a href=""></a>    <span class="fu">geom_bar</span>() <span class="sc">+</span></span>
+<span id="cb7-17"><a href=""></a>    ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span> </span>
+<span id="cb7-18"><a href=""></a>    <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> viridis<span class="sc">::</span><span class="fu">viridis</span>(<span class="dv">4</span>)[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]) <span class="sc">+</span> </span>
+<span id="cb7-19"><a href=""></a>    <span class="fu">guides</span>(<span class="at">fill =</span> <span class="st">'none'</span>) <span class="sc">+</span></span>
+<span id="cb7-20"><a href=""></a>    <span class="fu">labs</span>(<span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>)</span>
+<span id="cb7-21"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="data-visualization" class="slide level2">
 <h2>Data Visualization</h2>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href=""></a>gridExtra<span class="sc">::</span><span class="fu">grid.arrange</span>(</span>
-<span id="cb5-2"><a href=""></a>  <span class="fu">select</span>(fake_data, phys_id, spec_id, age) <span class="sc">|&gt;</span> </span>
-<span id="cb5-3"><a href=""></a>    <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">c</span>(spec_id, age)) <span class="sc">|&gt;</span></span>
-<span id="cb5-4"><a href=""></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">fill=</span>name)) <span class="sc">+</span></span>
-<span id="cb5-5"><a href=""></a>    <span class="fu">facet_wrap</span>(<span class="sc">~</span>name, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
-<span id="cb5-6"><a href=""></a>    <span class="fu">geom_histogram</span>() <span class="sc">+</span></span>
-<span id="cb5-7"><a href=""></a>    ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span></span>
-<span id="cb5-8"><a href=""></a>    <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> viridis<span class="sc">::</span><span class="fu">viridis</span>(<span class="dv">4</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]) <span class="sc">+</span> </span>
-<span id="cb5-9"><a href=""></a>    <span class="fu">guides</span>(<span class="at">fill =</span> <span class="st">'none'</span>) <span class="sc">+</span> </span>
-<span id="cb5-10"><a href=""></a>    <span class="fu">labs</span>(<span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>),</span>
-<span id="cb5-11"><a href=""></a>  <span class="fu">select</span>(fake_data, phys_id, gender, retired) <span class="sc">|&gt;</span> </span>
-<span id="cb5-12"><a href=""></a>    <span class="fu">mutate</span>(<span class="fu">across</span>(<span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>, as.factor)) <span class="sc">|&gt;</span></span>
-<span id="cb5-13"><a href=""></a>    <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">c</span>(gender, retired)) <span class="sc">|&gt;</span></span>
-<span id="cb5-14"><a href=""></a>    <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>value, <span class="at">fill=</span>name)) <span class="sc">+</span></span>
-<span id="cb5-15"><a href=""></a>    <span class="fu">facet_wrap</span>(<span class="sc">~</span>name, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
-<span id="cb5-16"><a href=""></a>    <span class="fu">geom_bar</span>() <span class="sc">+</span></span>
-<span id="cb5-17"><a href=""></a>    ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span> </span>
-<span id="cb5-18"><a href=""></a>    <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> viridis<span class="sc">::</span><span class="fu">viridis</span>(<span class="dv">4</span>)[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]) <span class="sc">+</span> </span>
-<span id="cb5-19"><a href=""></a>    <span class="fu">guides</span>(<span class="at">fill =</span> <span class="st">'none'</span>) <span class="sc">+</span></span>
-<span id="cb5-20"><a href=""></a>    <span class="fu">labs</span>(<span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>)</span>
-<span id="cb5-21"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-</section>
-<section id="data-visualization-1" class="slide level2">
-<h2>Data Visualization</h2>
 
-<img data-src="HHR_files/figure-revealjs/unnamed-chunk-5-1.png" width="960" class="r-stretch"></section>
+<img data-src="HHR_files/figure-revealjs/unnamed-chunk-7-1.png" width="960" class="r-stretch"></section>
 <section id="nested-data" class="slide level2">
 <h2>Nested Data</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb6" data-code-line-numbers="|2"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href=""></a>actuals <span class="ot">=</span> fake_data <span class="sc">|&gt;</span></span>
-<span id="cb6-2"><a href=""></a>  <span class="fu">nest_by</span>(spec_id)</span>
-<span id="cb6-3"><a href=""></a></span>
-<span id="cb6-4"><a href=""></a>actuals</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb8" data-code-line-numbers="2,5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href=""></a>actuals <span class="ot">=</span> fake_data <span class="sc">|&gt;</span></span>
+<span id="cb8-2"><a href=""></a>  <span class="fu">nest_by</span>(spec_id, <span class="at">.key =</span> <span class="st">"actuals"</span>)</span>
+<span id="cb8-3"><a href=""></a></span>
+<span id="cb8-4"><a href=""></a>entrants <span class="ot">=</span> fake_entrants <span class="sc">|&gt;</span></span>
+<span id="cb8-5"><a href=""></a>  <span class="fu">nest_by</span>(spec_id, <span class="at">.key =</span> <span class="st">'entrants'</span>)</span>
+<span id="cb8-6"><a href=""></a></span>
+<span id="cb8-7"><a href=""></a>actuals</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 4 × 2
 # Rowwise:  spec_id
-  spec_id               data
+  spec_id            actuals
     &lt;int&gt; &lt;list&lt;tibble[,7]&gt;&gt;
-1       0        [1,867 × 7]
-2       1          [796 × 7]
-3       2          [699 × 7]
-4       3          [369 × 7]</code></pre>
+1       0        [1,975 × 7]
+2       1          [838 × 7]
+3       2          [725 × 7]
+4       3          [389 × 7]</code></pre>
 </div>
 </div>
 </section>
-<section id="fake-entrants-data-set" class="slide level2">
-<h2>(Fake) Entrants Data Set</h2>
+<section id="four-functions" class="slide level2">
+<h2>Four Functions</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href=""></a>entrants_all <span class="ot">=</span> <span class="fu">tibble</span>(</span>
-<span id="cb8-2"><a href=""></a>  <span class="at">spec_id =</span> <span class="fu">sample</span>(specialties<span class="sc">$</span>spec_id, params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, <span class="at">replace =</span> T, params<span class="sc">$</span>spec_weights),</span>
-<span id="cb8-3"><a href=""></a>  <span class="at">age =</span> <span class="fu">as.integer</span>(<span class="fu">rnorm</span>(params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, <span class="dv">35</span>, <span class="dv">12</span>)) <span class="sc">|&gt;</span> <span class="fu">pmax</span>(<span class="dv">20</span>L), <span class="co"># a bit younger than the previous pool</span></span>
-<span id="cb8-4"><a href=""></a>  <span class="at">rurality =</span> <span class="fu">runif</span>(params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio),</span>
-<span id="cb8-5"><a href=""></a>  <span class="at">gender =</span> <span class="fu">as_factor</span>(<span class="fu">sample</span>(<span class="fu">c</span>(<span class="st">"M"</span>,<span class="st">"F"</span>), params<span class="sc">$</span>num_physicians <span class="sc">*</span> params<span class="sc">$</span>entrants_ratio, T))</span>
-<span id="cb8-6"><a href=""></a>) <span class="sc">|&gt;</span></span>
-<span id="cb8-7"><a href=""></a>  <span class="fu">nest_by</span>(spec_id)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href=""></a><span class="co"># returns a logistic object</span></span>
+<span id="cb10-2"><a href=""></a>calc_logit <span class="ot">=</span> <span class="cf">function</span>(df, equation) {</span>
+<span id="cb10-3"><a href=""></a>  df <span class="ot">=</span> df <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">retired =</span> <span class="fu">as_factor</span>(retired))</span>
+<span id="cb10-4"><a href=""></a>  <span class="fu">logistic_reg</span>(<span class="at">mode =</span> <span class="st">'classification'</span>, <span class="at">engine =</span> <span class="st">'glm'</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-5"><a href=""></a>    <span class="fu">fit</span>(<span class="fu">as.formula</span>(equation), <span class="at">data=</span>df)</span>
+<span id="cb10-6"><a href=""></a>}</span>
+<span id="cb10-7"><a href=""></a></span>
+<span id="cb10-8"><a href=""></a><span class="co"># returns a vector of predictions of retirement</span></span>
+<span id="cb10-9"><a href=""></a>calc_retirements <span class="ot">=</span> <span class="cf">function</span>(df, logit) {</span>
+<span id="cb10-10"><a href=""></a>  preds <span class="ot">=</span> <span class="fu">predict</span>(logit, df, <span class="at">type=</span><span class="st">'prob'</span>)</span>
+<span id="cb10-11"><a href=""></a>  preds<span class="sc">$</span>u <span class="ot">=</span> <span class="fu">runif</span>(<span class="fu">nrow</span>(preds))</span>
+<span id="cb10-12"><a href=""></a>  <span class="fu">return</span>(preds<span class="sc">$</span>.pred_TRUE <span class="sc">&gt;</span> preds<span class="sc">$</span>u)</span>
+<span id="cb10-13"><a href=""></a>}  </span>
+<span id="cb10-14"><a href=""></a></span>
+<span id="cb10-15"><a href=""></a><span class="co"># returns a dataframe of entrants (with made up phys id numbers)</span></span>
+<span id="cb10-16"><a href=""></a>calc_entrants <span class="ot">=</span> <span class="cf">function</span>(df, h) {</span>
+<span id="cb10-17"><a href=""></a>  df <span class="sc">|&gt;</span></span>
+<span id="cb10-18"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">phys_id =</span> <span class="fu">row_number</span>() <span class="sc">+</span> (h <span class="sc">*</span> <span class="dv">1000</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb10-19"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">entered =</span> T) <span class="sc">|&gt;</span></span>
+<span id="cb10-20"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">retired =</span> F)</span>
+<span id="cb10-21"><a href=""></a>}</span>
+<span id="cb10-22"><a href=""></a></span>
+<span id="cb10-23"><a href=""></a><span class="co"># simulates the progression of the workforce for one year</span></span>
+<span id="cb10-24"><a href=""></a>simulate_one_year <span class="ot">=</span> <span class="cf">function</span>(actuals_df, logit, entrants_df, h) {</span>
+<span id="cb10-25"><a href=""></a>  actuals_df <span class="ot">=</span> actuals_df <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>retired)</span>
+<span id="cb10-26"><a href=""></a>  actuals_df<span class="sc">$</span>entered <span class="ot">=</span> F</span>
+<span id="cb10-27"><a href=""></a>  actuals_df<span class="sc">$</span>age <span class="ot">=</span> actuals_df<span class="sc">$</span>age <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb10-28"><a href=""></a>  retired_idx <span class="ot">=</span> <span class="fu">calc_retirements</span>(actuals_df, logit)</span>
+<span id="cb10-29"><a href=""></a>  actuals_df<span class="sc">$</span>retired[retired_idx] <span class="ot">=</span> T</span>
+<span id="cb10-30"><a href=""></a>  entrants_df_with_id <span class="ot">=</span> <span class="fu">calc_entrants</span>(entrants_df, h)</span>
+<span id="cb10-31"><a href=""></a>  actuals_df <span class="ot">=</span> <span class="fu">bind_rows</span>(actuals_df, entrants_df_with_id)</span>
+<span id="cb10-32"><a href=""></a>  actuals_df<span class="sc">$</span>fiscal_id <span class="ot">=</span> params<span class="sc">$</span>num_years_of_data <span class="sc">+</span> h <span class="sc">-</span> <span class="dv">1</span></span>
+<span id="cb10-33"><a href=""></a>  <span class="fu">return</span>(actuals_df)</span>
+<span id="cb10-34"><a href=""></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-</section>
-<section id="fake-entrants-data-set-1" class="slide level2">
-<h2>(Fake) Entrants Data Set</h2>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href=""></a>entrants_all</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 4 × 2
-# Rowwise:  spec_id
-  spec_id               data
-    &lt;int&gt; &lt;list&lt;tibble[,3]&gt;&gt;
-1       0           [29 × 3]
-2       1           [11 × 3]
-3       2            [6 × 3]
-4       3            [4 × 3]</code></pre>
-</div>
-</div>
-</section>
-<section id="three-functions" class="slide level2">
-<h2>Three Functions</h2>
-<div class="cell">
-<div class="sourceCode cell-code" id="cb11" data-code-line-numbers="|2,9,16"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href=""></a><span class="co"># returns a logistic object</span></span>
-<span id="cb11-2"><a href=""></a>calc_logit <span class="ot">=</span> <span class="cf">function</span>(df, equation) {</span>
-<span id="cb11-3"><a href=""></a>  df <span class="ot">=</span> df <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">retired =</span> <span class="fu">as_factor</span>(retired))</span>
-<span id="cb11-4"><a href=""></a>  <span class="fu">logistic_reg</span>(<span class="at">mode =</span> <span class="st">'classification'</span>, <span class="at">engine =</span> <span class="st">'glm'</span>) <span class="sc">|&gt;</span></span>
-<span id="cb11-5"><a href=""></a>    <span class="fu">fit</span>(<span class="fu">as.formula</span>(equation), <span class="at">data=</span>df)</span>
-<span id="cb11-6"><a href=""></a>}</span>
-<span id="cb11-7"><a href=""></a></span>
-<span id="cb11-8"><a href=""></a><span class="co"># returns a vector of predictions</span></span>
-<span id="cb11-9"><a href=""></a>calc_retirements <span class="ot">=</span> <span class="cf">function</span>(df, logit) {</span>
-<span id="cb11-10"><a href=""></a>  preds <span class="ot">=</span> <span class="fu">predict</span>(logit, df, <span class="at">type=</span><span class="st">'prob'</span>)</span>
-<span id="cb11-11"><a href=""></a>  preds<span class="sc">$</span>u <span class="ot">=</span> <span class="fu">runif</span>(<span class="fu">nrow</span>(preds))</span>
-<span id="cb11-12"><a href=""></a>  <span class="fu">return</span>(preds<span class="sc">$</span>.pred_TRUE <span class="sc">&gt;</span> preds<span class="sc">$</span>u)</span>
-<span id="cb11-13"><a href=""></a>}  </span>
-<span id="cb11-14"><a href=""></a></span>
-<span id="cb11-15"><a href=""></a><span class="co"># returns a dataframe of entrants</span></span>
-<span id="cb11-16"><a href=""></a>calc_entrants <span class="ot">=</span> <span class="cf">function</span>(df, h) {</span>
-<span id="cb11-17"><a href=""></a>  df <span class="sc">|&gt;</span></span>
-<span id="cb11-18"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">phys_id =</span> <span class="fu">row_number</span>() <span class="sc">+</span> (h <span class="sc">*</span> <span class="dv">1000</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb11-19"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">entered =</span> T) <span class="sc">|&gt;</span></span>
-<span id="cb11-20"><a href=""></a>    <span class="fu">mutate</span>(<span class="at">retired =</span> F)</span>
-<span id="cb11-21"><a href=""></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
+</section></section>
+<section>
+<section id="logistic-regression" class="title-slide slide level1 center">
+<h1>Logistic Regression</h1>
+
 </section>
 <section id="logistic-models" class="slide level2">
 <h2>Logistic Models</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href=""></a>models_all <span class="ot">=</span> <span class="fu">tibble</span>(</span>
-<span id="cb12-2"><a href=""></a>  <span class="at">model_id =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>,</span>
-<span id="cb12-3"><a href=""></a>  <span class="at">equation =</span> <span class="fu">c</span>(</span>
-<span id="cb12-4"><a href=""></a>    <span class="st">"retired ~ age"</span>, </span>
-<span id="cb12-5"><a href=""></a>    <span class="st">"retired ~ age + I(age^2) + gender + rurality + fiscal_id"</span>)</span>
-<span id="cb12-6"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb11" data-code-line-numbers="|4-5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href=""></a>models_all <span class="ot">=</span> <span class="fu">tibble</span>(</span>
+<span id="cb11-2"><a href=""></a>  <span class="at">model_id =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>,</span>
+<span id="cb11-3"><a href=""></a>  <span class="at">equation =</span> <span class="fu">c</span>(</span>
+<span id="cb11-4"><a href=""></a>    <span class="st">"retired ~ age"</span>, </span>
+<span id="cb11-5"><a href=""></a>    <span class="st">"retired ~ rurality + age + I(age^2) + gender"</span>)</span>
+<span id="cb11-6"><a href=""></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="model-selection" class="slide level2">
 <h2>Model Selection</h2>
+<ul>
+<li class="fragment">Selection criterion: accuracy</li>
+</ul>
 <div class="fragment">
 <div class="cell">
-<div class="sourceCode cell-code" id="cb13" data-code-line-numbers="1-3|4|5|6-8|10"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href=""></a>accuracy <span class="ot">=</span> models_all <span class="sc">|&gt;</span></span>
-<span id="cb13-2"><a href=""></a>  <span class="fu">crossing</span>(fake_data) <span class="sc">|&gt;</span></span>
-<span id="cb13-3"><a href=""></a>  <span class="fu">nest_by</span>(model_id, equation) <span class="sc">|&gt;</span></span>
-<span id="cb13-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">logit =</span> <span class="fu">list</span>(<span class="fu">calc_logit</span>(data, equation))) <span class="sc">|&gt;</span></span>
-<span id="cb13-5"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">pred_retired =</span> <span class="fu">list</span>(<span class="fu">calc_retirements</span>(data, logit))) <span class="sc">|&gt;</span></span>
-<span id="cb13-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">retired =</span> <span class="fu">list</span>(data<span class="sc">$</span>retired)) <span class="sc">|&gt;</span></span>
-<span id="cb13-7"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">accurate =</span> <span class="fu">list</span>(pred_retired <span class="sc">==</span> retired)) <span class="sc">|&gt;</span></span>
-<span id="cb13-8"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">accuracy =</span> <span class="fu">mean</span>(accurate))</span>
-<span id="cb13-9"><a href=""></a></span>
-<span id="cb13-10"><a href=""></a>accuracy</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 2 × 8
-# Rowwise:  model_id, equation
-  model_id equation         data logit    pred_retired retired accurate accuracy
-     &lt;int&gt; &lt;chr&gt;     &lt;list&lt;tibb&gt; &lt;list&gt;   &lt;list&gt;       &lt;list&gt;  &lt;list&gt;      &lt;dbl&gt;
-1        1 retired … [3,731 × 8] &lt;fit[+]&gt; &lt;lgl&gt;        &lt;lgl&gt;   &lt;lgl&gt;       0.999
-2        2 retired … [3,731 × 8] &lt;fit[+]&gt; &lt;lgl&gt;        &lt;lgl&gt;   &lt;lgl&gt;       1    </code></pre>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href=""></a>accuracy <span class="ot">=</span> models_all <span class="sc">|&gt;</span></span>
+<span id="cb12-2"><a href=""></a>  <span class="fu">crossing</span>(<span class="fu">filter</span>(fake_data, <span class="sc">!</span>entered)) <span class="sc">|&gt;</span></span>
+<span id="cb12-3"><a href=""></a>  <span class="fu">nest_by</span>(model_id, equation) <span class="sc">|&gt;</span></span>
+<span id="cb12-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">logit =</span> <span class="fu">list</span>(<span class="fu">calc_logit</span>(data, equation))) <span class="sc">|&gt;</span></span>
+<span id="cb12-5"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">pred_retired =</span> <span class="fu">list</span>(<span class="fu">calc_retirements</span>(data, logit))) <span class="sc">|&gt;</span></span>
+<span id="cb12-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">retired =</span> <span class="fu">list</span>(data<span class="sc">$</span>retired)) <span class="sc">|&gt;</span></span>
+<span id="cb12-7"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">is_accurate =</span> <span class="fu">list</span>(pred_retired <span class="sc">==</span> retired)) <span class="sc">|&gt;</span></span>
+<span id="cb12-8"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">accuracy =</span> <span class="fu">mean</span>(is_accurate))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </div>
-</div>
-<p><br></p>
 <ul>
 <li class="fragment"><strong>Model #2 (barely) beats Model #1!</strong></li>
 </ul>
@@ -705,105 +718,98 @@ Tim Hister
 <section id="model-selection-1" class="slide level2">
 <h2>Model Selection</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href=""></a>models <span class="ot">=</span> models_all[<span class="fu">which.max</span>(accuracy<span class="sc">$</span>accuracy), ]</span>
-<span id="cb15-2"><a href=""></a></span>
-<span id="cb15-3"><a href=""></a>models</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href=""></a>models <span class="ot">=</span> models_all[<span class="fu">which.max</span>(accuracy<span class="sc">$</span>accuracy), ]</span>
+<span id="cb13-2"><a href=""></a></span>
+<span id="cb13-3"><a href=""></a>models</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 2
-  model_id equation                                                
-     &lt;int&gt; &lt;chr&gt;                                                   
-1        2 retired ~ age + I(age^2) + gender + rurality + fiscal_id</code></pre>
+  model_id equation     
+     &lt;int&gt; &lt;chr&gt;        
+1        1 retired ~ age</code></pre>
 </div>
 </div>
 </section>
 <section id="logistic-regressions" class="slide level2">
 <h2>Logistic Regressions</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb17" data-code-line-numbers="13"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href=""></a>logits <span class="ot">=</span> actuals <span class="sc">|&gt;</span></span>
-<span id="cb17-2"><a href=""></a>  <span class="fu">crossing</span>(models) <span class="sc">|&gt;</span></span>
-<span id="cb17-3"><a href=""></a>  <span class="fu">rename</span>(<span class="at">actuals =</span> data) <span class="sc">|&gt;</span></span>
-<span id="cb17-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">data =</span> <span class="fu">list</span>(<span class="fu">calc_logit</span>(<span class="fu">first</span>(actuals), equation))) <span class="sc">|&gt;</span></span>
-<span id="cb17-5"><a href=""></a>  <span class="fu">select</span>(<span class="sc">-</span>actuals, <span class="sc">-</span>equation)</span>
-<span id="cb17-6"><a href=""></a></span>
-<span id="cb17-7"><a href=""></a>logits</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb15" data-code-line-numbers="13"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href=""></a>logits <span class="ot">=</span> actuals <span class="sc">|&gt;</span></span>
+<span id="cb15-2"><a href=""></a>  <span class="fu">crossing</span>(models) <span class="sc">|&gt;</span></span>
+<span id="cb15-3"><a href=""></a>  <span class="fu">select</span>(spec_id, model_id, equation, actuals) <span class="sc">|&gt;</span></span>
+<span id="cb15-4"><a href=""></a>  <span class="fu">rowwise</span>(spec_id, model_id, equation) <span class="sc">|&gt;</span></span>
+<span id="cb15-5"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">logit =</span> <span class="fu">list</span>(<span class="fu">calc_logit</span>(actuals, equation))) <span class="sc">|&gt;</span></span>
+<span id="cb15-6"><a href=""></a>  <span class="fu">select</span>(logit)</span>
+<span id="cb15-7"><a href=""></a>  </span>
+<span id="cb15-8"><a href=""></a></span>
+<span id="cb15-9"><a href=""></a>logits</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 4 × 3
-  spec_id model_id data    
-    &lt;int&gt;    &lt;int&gt; &lt;list&gt;  
-1       0        2 &lt;fit[+]&gt;
-2       1        2 &lt;fit[+]&gt;
-3       2        2 &lt;fit[+]&gt;
-4       3        2 &lt;fit[+]&gt;</code></pre>
+<pre><code># A tibble: 4 × 4
+# Rowwise:  spec_id, model_id, equation
+  spec_id model_id equation      logit   
+    &lt;int&gt;    &lt;int&gt; &lt;chr&gt;         &lt;list&gt;  
+1       0        1 retired ~ age &lt;fit[+]&gt;
+2       1        1 retired ~ age &lt;fit[+]&gt;
+3       2        1 retired ~ age &lt;fit[+]&gt;
+4       3        1 retired ~ age &lt;fit[+]&gt;</code></pre>
 </div>
 </div>
 </section>
 <section id="simulation" class="slide level2">
 <h2>Simulation</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb19" data-code-line-numbers="|2|11|14,17|16"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href=""></a>forecasts <span class="ot">=</span> actuals</span>
-<span id="cb19-2"><a href=""></a>forecasts<span class="sc">$</span>data <span class="ot">=</span> <span class="fu">map</span>(actuals<span class="sc">$</span>spec_id, <span class="cf">function</span>(spec) {</span>
-<span id="cb19-3"><a href=""></a>  logit <span class="ot">=</span> <span class="fu">filter</span>(logits, spec_id <span class="sc">==</span> spec) <span class="sc">|&gt;</span> <span class="fu">pull</span>(data) <span class="sc">|&gt;</span> <span class="fu">first</span>()</span>
-<span id="cb19-4"><a href=""></a>  df_init <span class="ot">=</span> actuals <span class="sc">|&gt;</span></span>
-<span id="cb19-5"><a href=""></a>      <span class="fu">filter</span>(spec_id <span class="sc">==</span> spec) <span class="sc">|&gt;</span></span>
-<span id="cb19-6"><a href=""></a>      <span class="fu">pull</span>(data) <span class="sc">|&gt;</span></span>
-<span id="cb19-7"><a href=""></a>      <span class="fu">first</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb19-8"><a href=""></a>      <span class="fu">filter</span>(fiscal_id <span class="sc">==</span> (params<span class="sc">$</span>num_years_of_data <span class="sc">-</span> <span class="dv">1</span>))</span>
-<span id="cb19-9"><a href=""></a>  entrants_spec <span class="ot">=</span> entrants_all <span class="sc">|&gt;</span> <span class="fu">filter</span>(spec_id <span class="sc">==</span> spec) <span class="sc">|&gt;</span> <span class="fu">pull</span>(data) <span class="sc">|&gt;</span> <span class="fu">first</span>()</span>
-<span id="cb19-10"><a href=""></a>  </span>
-<span id="cb19-11"><a href=""></a>  <span class="fu">accumulate</span>(<span class="dv">1</span><span class="sc">:</span>params<span class="sc">$</span>num_years_to_forecast, <span class="cf">function</span>(df, h) {</span>
-<span id="cb19-12"><a href=""></a>    df <span class="ot">=</span> df <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>retired)</span>
-<span id="cb19-13"><a href=""></a>    df<span class="sc">$</span>entered <span class="ot">=</span> F</span>
-<span id="cb19-14"><a href=""></a>    retired_idx <span class="ot">=</span> <span class="fu">calc_retirements</span>(df, logit)</span>
-<span id="cb19-15"><a href=""></a>    df<span class="sc">$</span>retired[retired_idx] <span class="ot">=</span> T</span>
-<span id="cb19-16"><a href=""></a>    df<span class="sc">$</span>age <span class="ot">=</span> df<span class="sc">$</span>age <span class="sc">+</span> <span class="dv">1</span></span>
-<span id="cb19-17"><a href=""></a>    entrants <span class="ot">=</span> <span class="fu">calc_entrants</span>(entrants_spec, h)</span>
-<span id="cb19-18"><a href=""></a>    df <span class="ot">=</span> <span class="fu">bind_rows</span>(df, entrants)</span>
-<span id="cb19-19"><a href=""></a>    df<span class="sc">$</span>fiscal_id <span class="ot">=</span> params<span class="sc">$</span>num_years_of_data <span class="sc">+</span> h <span class="sc">-</span> <span class="dv">1</span></span>
-<span id="cb19-20"><a href=""></a>    <span class="fu">return</span>(df)</span>
-<span id="cb19-21"><a href=""></a>  }, <span class="at">.init =</span> df_init) <span class="sc">|&gt;</span></span>
-<span id="cb19-22"><a href=""></a>    <span class="fu">bind_rows</span>() <span class="sc">|&gt;</span></span>
-<span id="cb19-23"><a href=""></a>    <span class="fu">filter</span>(fiscal_id <span class="sc">&gt;=</span> params<span class="sc">$</span>num_years_of_data) <span class="sc">|&gt;</span></span>
-<span id="cb19-24"><a href=""></a>    <span class="fu">arrange</span>(phys_id, fiscal_id)</span>
-<span id="cb19-25"><a href=""></a>})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb17" data-code-line-numbers="|9|1-2|"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href=""></a>forecasts <span class="ot">=</span> specialties <span class="sc">|&gt;</span> <span class="fu">select</span>(spec_id)</span>
+<span id="cb17-2"><a href=""></a>forecasts<span class="sc">$</span>forecasts <span class="ot">=</span> actuals <span class="sc">|&gt;</span></span>
+<span id="cb17-3"><a href=""></a>  <span class="fu">inner_join</span>(logits) <span class="sc">|&gt;</span></span>
+<span id="cb17-4"><a href=""></a>  <span class="fu">inner_join</span>(entrants) <span class="sc">|&gt;</span></span>
+<span id="cb17-5"><a href=""></a>  </span>
+<span id="cb17-6"><a href=""></a>  <span class="fu">apply</span>(<span class="dv">1</span>, <span class="cf">function</span>(row) {</span>
+<span id="cb17-7"><a href=""></a>    actuals_init <span class="ot">=</span> row<span class="sc">$</span>actuals <span class="sc">|&gt;</span> <span class="fu">filter</span>(fiscal_id <span class="sc">==</span> (params<span class="sc">$</span>num_years_of_data <span class="sc">-</span> <span class="dv">1</span>))</span>
+<span id="cb17-8"><a href=""></a>    </span>
+<span id="cb17-9"><a href=""></a>    <span class="fu">accumulate</span>(<span class="dv">1</span><span class="sc">:</span>params<span class="sc">$</span>num_years_to_forecast, <span class="cf">function</span>(actuals_df, h) {</span>
+<span id="cb17-10"><a href=""></a>      actuals_df <span class="ot">=</span> <span class="fu">simulate_one_year</span>(actuals_df, row<span class="sc">$</span>logit, row<span class="sc">$</span>entrants, h)</span>
+<span id="cb17-11"><a href=""></a>    }, <span class="at">.init =</span> actuals_init) <span class="sc">|&gt;</span></span>
+<span id="cb17-12"><a href=""></a>      <span class="fu">bind_rows</span>() <span class="sc">|&gt;</span></span>
+<span id="cb17-13"><a href=""></a>      <span class="fu">filter</span>(fiscal_id <span class="sc">&gt;=</span> params<span class="sc">$</span>num_years_of_data) <span class="sc">|&gt;</span></span>
+<span id="cb17-14"><a href=""></a>      <span class="fu">arrange</span>(phys_id, fiscal_id)</span>
+<span id="cb17-15"><a href=""></a>})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="result" class="slide level2">
 <h2>Result</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href=""></a>result <span class="ot">=</span> <span class="fu">bind_rows</span>(</span>
-<span id="cb20-2"><a href=""></a>  actuals <span class="sc">|&gt;</span> <span class="fu">unnest</span>(data) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">is_forecast =</span> F),</span>
-<span id="cb20-3"><a href=""></a>  forecasts <span class="sc">|&gt;</span> <span class="fu">unnest</span>(data) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">is_forecast =</span> T)</span>
-<span id="cb20-4"><a href=""></a>) <span class="sc">|&gt;</span></span>
-<span id="cb20-5"><a href=""></a>  <span class="fu">arrange</span>(spec_id, phys_id, fiscal_id) <span class="sc">|&gt;</span></span>
-<span id="cb20-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">fiscal =</span> <span class="fu">Vectorize</span>(hsiaR<span class="sc">::</span>fiscal_add)(params<span class="sc">$</span>start_year, fiscal_id)) <span class="sc">|&gt;</span></span>
-<span id="cb20-7"><a href=""></a>  <span class="fu">select</span>(<span class="sc">-</span>fiscal_id) <span class="sc">|&gt;</span></span>
-<span id="cb20-8"><a href=""></a>  <span class="fu">inner_join</span>(specialties) <span class="sc">|&gt;</span></span>
-<span id="cb20-9"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">spec =</span> <span class="fu">fct</span>(spec)) <span class="sc">|&gt;</span></span>
-<span id="cb20-10"><a href=""></a>  <span class="fu">group_by</span>(spec, fiscal, is_forecast) <span class="sc">|&gt;</span></span>
-<span id="cb20-11"><a href=""></a>  <span class="fu">summarise</span>(</span>
-<span id="cb20-12"><a href=""></a>    <span class="at">headcount =</span> <span class="fu">n</span>(),</span>
-<span id="cb20-13"><a href=""></a>    <span class="at">retired =</span> <span class="fu">sum</span>(retired),</span>
-<span id="cb20-14"><a href=""></a>    <span class="at">entered =</span> <span class="fu">sum</span>(entered)</span>
-<span id="cb20-15"><a href=""></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href=""></a>result <span class="ot">=</span> <span class="fu">bind_rows</span>(</span>
+<span id="cb18-2"><a href=""></a>  actuals <span class="sc">|&gt;</span> <span class="fu">unnest</span>(actuals) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">is_forecast =</span> F),</span>
+<span id="cb18-3"><a href=""></a>  forecasts <span class="sc">|&gt;</span> <span class="fu">unnest</span>(forecasts) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">is_forecast =</span> T)</span>
+<span id="cb18-4"><a href=""></a>) <span class="sc">|&gt;</span></span>
+<span id="cb18-5"><a href=""></a>  <span class="fu">arrange</span>(spec_id, phys_id, fiscal_id) <span class="sc">|&gt;</span></span>
+<span id="cb18-6"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">fiscal =</span> <span class="fu">Vectorize</span>(hsiaR<span class="sc">::</span>fiscal_add)(params<span class="sc">$</span>start_year, fiscal_id)) <span class="sc">|&gt;</span></span>
+<span id="cb18-7"><a href=""></a>  <span class="fu">select</span>(<span class="sc">-</span>fiscal_id) <span class="sc">|&gt;</span></span>
+<span id="cb18-8"><a href=""></a>  <span class="fu">inner_join</span>(specialties) <span class="sc">|&gt;</span></span>
+<span id="cb18-9"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">spec =</span> <span class="fu">fct</span>(spec)) <span class="sc">|&gt;</span></span>
+<span id="cb18-10"><a href=""></a>  <span class="fu">group_by</span>(spec, fiscal, is_forecast) <span class="sc">|&gt;</span></span>
+<span id="cb18-11"><a href=""></a>  <span class="fu">summarise</span>(</span>
+<span id="cb18-12"><a href=""></a>    <span class="at">headcount =</span> <span class="fu">n</span>(),</span>
+<span id="cb18-13"><a href=""></a>    <span class="at">retired =</span> <span class="fu">sum</span>(retired),</span>
+<span id="cb18-14"><a href=""></a>    <span class="at">entered =</span> <span class="fu">sum</span>(entered)</span>
+<span id="cb18-15"><a href=""></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="result-graphically" class="slide level2">
 <h2>Result (Graphically)</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href=""></a>result <span class="sc">|&gt;</span></span>
-<span id="cb21-2"><a href=""></a>  <span class="fu">pivot_longer</span>(<span class="at">cols=</span><span class="fu">c</span>(headcount, retired, entered)) <span class="sc">|&gt;</span></span>
-<span id="cb21-3"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">name =</span> <span class="fu">fct</span>(name)) <span class="sc">|&gt;</span></span>
-<span id="cb21-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">fiscal =</span> <span class="fu">fct</span>(fiscal)) <span class="sc">|&gt;</span></span>
-<span id="cb21-5"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>fiscal, <span class="at">y=</span>value, <span class="at">color=</span>name, <span class="at">group=</span><span class="fu">interaction</span>(spec, name))) <span class="sc">+</span></span>
-<span id="cb21-6"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>spec, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
-<span id="cb21-7"><a href=""></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> <span class="sc">~</span><span class="fu">filter</span>(., <span class="sc">!</span>is_forecast)) <span class="sc">+</span></span>
-<span id="cb21-8"><a href=""></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> <span class="sc">~</span><span class="fu">filter</span>(., is_forecast), <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">+</span></span>
-<span id="cb21-9"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb21-10"><a href=""></a>  ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span></span>
-<span id="cb21-11"><a href=""></a>  <span class="fu">scale_color_viridis_d</span>(<span class="at">option =</span> <span class="st">"C"</span>) <span class="sc">+</span></span>
-<span id="cb21-12"><a href=""></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">'bottom'</span>) <span class="sc">+</span></span>
-<span id="cb21-13"><a href=""></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_text</span>(<span class="at">angle =</span> <span class="dv">45</span>, <span class="at">hjust =</span> <span class="dv">1</span>)) <span class="sc">+</span></span>
-<span id="cb21-14"><a href=""></a>  <span class="fu">labs</span>(<span class="at">color=</span><span class="cn">NULL</span>, <span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href=""></a>result <span class="sc">|&gt;</span></span>
+<span id="cb19-2"><a href=""></a>  <span class="fu">pivot_longer</span>(<span class="at">cols=</span><span class="fu">c</span>(headcount, retired, entered)) <span class="sc">|&gt;</span></span>
+<span id="cb19-3"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">name =</span> <span class="fu">fct</span>(name)) <span class="sc">|&gt;</span></span>
+<span id="cb19-4"><a href=""></a>  <span class="fu">mutate</span>(<span class="at">fiscal =</span> <span class="fu">fct</span>(fiscal)) <span class="sc">|&gt;</span></span>
+<span id="cb19-5"><a href=""></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>fiscal, <span class="at">y=</span>value, <span class="at">color=</span>name, <span class="at">group=</span><span class="fu">interaction</span>(spec, name))) <span class="sc">+</span></span>
+<span id="cb19-6"><a href=""></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>spec, <span class="at">scales=</span><span class="st">'free'</span>) <span class="sc">+</span></span>
+<span id="cb19-7"><a href=""></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> <span class="sc">~</span><span class="fu">filter</span>(., <span class="sc">!</span>is_forecast)) <span class="sc">+</span></span>
+<span id="cb19-8"><a href=""></a>  <span class="fu">geom_line</span>(<span class="at">data =</span> <span class="sc">~</span><span class="fu">filter</span>(., is_forecast), <span class="at">linetype =</span> <span class="st">"dashed"</span>) <span class="sc">+</span></span>
+<span id="cb19-9"><a href=""></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb19-10"><a href=""></a>  ggthemes<span class="sc">::</span><span class="fu">theme_clean</span>() <span class="sc">+</span></span>
+<span id="cb19-11"><a href=""></a>  <span class="fu">scale_color_viridis_d</span>(<span class="at">option =</span> <span class="st">"C"</span>) <span class="sc">+</span></span>
+<span id="cb19-12"><a href=""></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">'bottom'</span>) <span class="sc">+</span></span>
+<span id="cb19-13"><a href=""></a>  <span class="fu">theme</span>(<span class="at">axis.text.x =</span> <span class="fu">element_text</span>(<span class="at">angle =</span> <span class="dv">45</span>, <span class="at">hjust =</span> <span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb19-14"><a href=""></a>  <span class="fu">labs</span>(<span class="at">color=</span><span class="cn">NULL</span>, <span class="at">x=</span><span class="cn">NULL</span>, <span class="at">y=</span><span class="cn">NULL</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="result-graphically-1" class="slide level2">
@@ -813,27 +819,27 @@ Tim Hister
 <section id="result-table" class="slide level2">
 <h2>Result (Table)</h2>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href=""></a>result <span class="sc">|&gt;</span></span>
-<span id="cb22-2"><a href=""></a>  <span class="fu">reactable</span>(</span>
-<span id="cb22-3"><a href=""></a>    <span class="at">groupBy =</span> <span class="st">"spec"</span>,</span>
-<span id="cb22-4"><a href=""></a>    <span class="at">highlight =</span> T,</span>
-<span id="cb22-5"><a href=""></a>    <span class="at">fullWidth =</span> F,</span>
-<span id="cb22-6"><a href=""></a>    <span class="at">columns =</span> <span class="fu">list</span>(</span>
-<span id="cb22-7"><a href=""></a>      <span class="at">is_forecast =</span> <span class="fu">colDef</span>(<span class="at">show =</span> F),</span>
-<span id="cb22-8"><a href=""></a>      <span class="at">spec =</span> <span class="fu">colDef</span>(<span class="at">minWidth =</span> <span class="dv">250</span>)</span>
-<span id="cb22-9"><a href=""></a>    ),</span>
-<span id="cb22-10"><a href=""></a>    <span class="at">defaultColDef =</span> <span class="fu">colDef</span>(<span class="at">style =</span> <span class="cf">function</span>(value, index) {</span>
-<span id="cb22-11"><a href=""></a>      <span class="cf">if</span> (result[[index, <span class="st">'is_forecast'</span>]]) <span class="fu">list</span>(<span class="at">backgroundColor =</span> <span class="st">'lightyellow'</span>)</span>
-<span id="cb22-12"><a href=""></a>    })</span>
-<span id="cb22-13"><a href=""></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href=""></a>result <span class="sc">|&gt;</span></span>
+<span id="cb20-2"><a href=""></a>  <span class="fu">reactable</span>(</span>
+<span id="cb20-3"><a href=""></a>    <span class="at">groupBy =</span> <span class="st">"spec"</span>,</span>
+<span id="cb20-4"><a href=""></a>    <span class="at">highlight =</span> T,</span>
+<span id="cb20-5"><a href=""></a>    <span class="at">fullWidth =</span> F,</span>
+<span id="cb20-6"><a href=""></a>    <span class="at">columns =</span> <span class="fu">list</span>(</span>
+<span id="cb20-7"><a href=""></a>      <span class="at">is_forecast =</span> <span class="fu">colDef</span>(<span class="at">show =</span> F),</span>
+<span id="cb20-8"><a href=""></a>      <span class="at">spec =</span> <span class="fu">colDef</span>(<span class="at">minWidth =</span> <span class="dv">250</span>)</span>
+<span id="cb20-9"><a href=""></a>    ),</span>
+<span id="cb20-10"><a href=""></a>    <span class="at">defaultColDef =</span> <span class="fu">colDef</span>(<span class="at">style =</span> <span class="cf">function</span>(value, index) {</span>
+<span id="cb20-11"><a href=""></a>      <span class="cf">if</span> (result[[index, <span class="st">'is_forecast'</span>]]) <span class="fu">list</span>(<span class="at">backgroundColor =</span> <span class="st">'lightyellow'</span>)</span>
+<span id="cb20-12"><a href=""></a>    })</span>
+<span id="cb20-13"><a href=""></a>  )</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="result-table-1" class="slide level2">
 <h2>Result (Table)</h2>
 <div class="cell">
 <div class="cell-output-display">
-<div class="reactable html-widget html-fill-item" id="htmlwidget-55e0e210cb7775e6caca" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-55e0e210cb7775e6caca">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"spec":["FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY"],"fiscal":["FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34"],"is_forecast":[false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true],"headcount":[499,462,457,449,464,493,506,525,537,549,558,567,579,593,215,199,193,189,195,206,213,217,224,231,232,236,234,238,186,174,172,167,171,177,177,180,183,182,184,186,188,185,100,91,90,88,89,93,95,95,95,99,102,102,101,102],"retired":[37,5,8,14,0,16,10,17,17,20,20,17,15,23,16,6,4,5,0,4,7,4,4,10,7,13,7,10,12,2,5,2,0,6,3,3,7,4,4,4,9,6,9,1,2,3,0,2,4,4,0,1,4,5,3,1],"entered":[0,0,0,0,29,29,29,29,29,29,29,29,29,29,0,0,0,0,11,11,11,11,11,11,11,11,11,11,0,0,0,0,6,6,6,6,6,6,6,6,6,6,0,0,0,0,4,4,4,4,4,4,4,4,4,4]},"columns":[{"id":"spec","name":"spec","type":"factor","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}],"minWidth":250},{"id":"fiscal","name":"fiscal","type":"character","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"is_forecast","name":"is_forecast","type":"logical","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}],"show":false},{"id":"headcount","name":"headcount","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"retired","name":"retired","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"entered","name":"entered","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]}],"groupBy":["spec"],"highlight":true,"dataKey":"d4435c48d64c4326db6d39877d437b69"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div class="reactable html-widget html-fill-item" id="htmlwidget-6d082f57f3ad3554e468" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-6d082f57f3ad3554e468">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"spec":["FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","FAMILY MEDICINE","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","DERMATOLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","NEUROLOGY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY","PSYCHIATRY"],"fiscal":["FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34","FY2020/21","FY2021/22","FY2022/23","FY2023/24","FY2024/25","FY2025/26","FY2026/27","FY2027/28","FY2028/29","FY2029/30","FY2030/31","FY2031/32","FY2032/33","FY2033/34"],"is_forecast":[false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true,false,false,false,false,true,true,true,true,true,true,true,true,true,true],"headcount":[527,488,484,476,494,506,528,544,563,569,580,595,612,627,226,209,203,200,207,213,219,225,236,240,246,246,252,252,192,180,178,175,176,179,180,183,184,188,186,189,187,187,105,96,95,93,96,99,98,100,104,106,107,104,104,105],"retired":[39,4,8,10,16,6,12,9,22,17,13,11,13,25,17,6,3,4,5,5,5,0,7,5,11,5,11,2,12,2,3,5,3,5,3,5,2,8,3,8,6,5,9,1,2,2,2,6,3,1,3,4,8,5,4,3],"entered":[28,28,28,28,28,28,28,28,28,28,28,28,28,28,11,11,11,11,11,11,11,11,11,11,11,11,11,11,6,6,6,6,6,6,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,5,5,5,5,5,5]},"columns":[{"id":"spec","name":"spec","type":"factor","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}],"minWidth":250},{"id":"fiscal","name":"fiscal","type":"character","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"is_forecast","name":"is_forecast","type":"logical","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}],"show":false},{"id":"headcount","name":"headcount","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"retired","name":"retired","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]},{"id":"entered","name":"entered","type":"numeric","style":[null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},null,null,null,null,{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"},{"backgroundColor":"lightyellow"}]}],"groupBy":["spec"],"highlight":true,"dataKey":"6d4f070f6fa02e16d1df91eba2c45ce3"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 <div class="quarto-auto-generated-content">
