@@ -1,7 +1,7 @@
 ---
-title: "Health Human Resources Supply and Demand Forecasting"
+title: "HHR Supply Forecasting"
 subtitle: "BC Cancer"
-date: today
+date: 2024-10-04
 author: Tim Hister
 format: 
   revealjs:
@@ -26,20 +26,20 @@ editor_options:
 
 -   Forecast the gap between supply and demand for physicians in B.C.
 
--   $gap_t = demand_t - supply_t$
-
--   $supply_t = headcount_t \times FTE_t$
-
--   Model Goals:
+-   Two Major Goals:
 
     1.  Predict all variables (supply, demand, FTE, gap, etc.)
     2.  Maintainable over time ("elegant" code, parameterization, etc.)
 
 ## Headcount
 
--   $headcount_t = headcount_{t-1} + entrants_{t-1} - retirees_{t-1}$
+-   $gap_{t,s} = demand_{t,s} - supply_{t,s}$
 
--   $entrants$: average of the three most recent years of available data.
+-   $supply_t = headcount_t \times FTE_t$
+
+-   $headcount_t = headcount_{t-1} + entrants_{t} - retirees_{t-1}$
+
+-   $entrants$: average of three most recent years
 
 -   $retirees$: logistic regression
 
@@ -49,8 +49,7 @@ editor_options:
                              &+ \beta_4 \cdot gender \\
                              &+ \beta_5 \cdot model\_specific\_vars)
       \end{aligned}$
-
--   Seven models (today two)
+      
 
 ## Data
 
@@ -71,7 +70,7 @@ editor_options:
 ```{r}
 #| code-line-numbers: "5-6|10-15"
 pacman::p_load(tidyverse, tidymodels, reactable)
-set.seed(10)
+set.seed(1)
 
 specialties = tibble(
   spec_id = 0:3,
@@ -83,22 +82,18 @@ params = list(
   num_years_to_forecast = 10L,
   num_years_of_data = 4L,
   num_physicians = 8000L,
-  retirement_percentage = 0.1, 
   entrants_ratio = .05,
-  spec_weights = c(.6, .1, .1, .2),
-  retirement_random_eqn = expr(rurality + age + age^2 + if_else(gender == "M", 10, 0) + rnorm(params$num_physicians, 0, 200))
+  spec_weights = c(.6, .1, .1, .2)
 )
 ```
 
-## Fiscals
-
 ```{r}
+#| echo: false
+
 fiscals = tibble(
   fiscal_id = 1:(params$num_years_of_data + params$num_years_to_forecast),
   fiscal = paste0("FY", as.integer(substr(params$start_year, 3, 6)) + fiscal_id - 1, "/", as.integer(substr(params$start_year, 8, 10)) + fiscal_id - 1)
 )
-
-fiscals
 ```
 
 
@@ -113,7 +108,7 @@ fake_data = tibble(
   gender = as_factor(sample(c("M","F"), params$num_physicians, T)) # assume two genders for simplicity
 ) |>
   crossing(fiscal_id = 1:params$num_years_of_data) |>
-  mutate(age = age + fiscal_id - 1) |>
+  mutate(age = as.integer(age + fiscal_id - 1)) |>
   mutate(entered = F) |>
   mutate(retirement_score = -10 + 0.2 * age + 0.002 * age^2 + 2 * rurality + if_else(gender == "M", 0.5, 0) + rnorm(n(), 0, 2)) |>
   mutate(retirement_prob = 1 - (1 / (1 + exp(-retirement_score)))) |>
@@ -133,9 +128,9 @@ fake_data = fake_data |>
 )
 ```
 
-## (Fake) Entrants Data
-
 ```{r}
+#| echo: false
+
 fake_entrants = tibble(
   phys_id = (1:(params$num_physicians * params$entrants_ratio)) + params$num_physicians,
   spec_id = sample(specialties$spec_id, params$num_physicians * params$entrants_ratio, replace = T, params$spec_weights),
@@ -147,9 +142,9 @@ fake_entrants = tibble(
 )
 ```
 
-## Add (Fake) Entrants to (Fake) Data
-
 ```{r}
+#| echo: false
+
 fake_data = bind_rows(
   fake_data,
   fake_data |>
@@ -162,7 +157,7 @@ fake_data = bind_rows(
         mutate(age = age + fiscal_id - 1)
       , by=c('spec_id', 'fiscal_id'), relationship = 'many-to-many')
 ) |>
-  arrange(spec_id, fiscal_id)
+  arrange(spec_id, phys_id, fiscal_id)
 ```
 
 ## Data
@@ -171,35 +166,7 @@ fake_data = bind_rows(
 fake_data
 ```
 
-## Visualization
-
-```{r}
-#| eval: false
-
-gridExtra::grid.arrange(
-  select(fake_data, phys_id, spec_id, age) |> 
-    pivot_longer(cols = c(spec_id, age)) |>
-    ggplot(aes(x=value, fill=name)) +
-    facet_wrap(~name, scales='free') +
-    geom_histogram() +
-    ggthemes::theme_clean() +
-    scale_fill_manual(values = viridis::viridis(4)[1:2]) + 
-    guides(fill = 'none') + 
-    labs(x=NULL, y=NULL),
-  select(fake_data, phys_id, gender, retired) |> 
-    mutate(across(2:3, as.factor)) |>
-    pivot_longer(cols = c(gender, retired)) |>
-    ggplot(aes(x=value, fill=name)) +
-    facet_wrap(~name, scales='free') +
-    geom_bar() +
-    ggthemes::theme_clean() + 
-    scale_fill_manual(values = viridis::viridis(4)[3:4]) + 
-    guides(fill = 'none') +
-    labs(x=NULL, y=NULL)
-)
-```
-
-## Data Visualization
+## Histograms
 
 ```{r}
 #| echo: false
@@ -220,7 +187,7 @@ gridExtra::grid.arrange(
     pivot_longer(cols = c(gender, retired)) |>
     ggplot(aes(x=value, fill=name)) +
     facet_wrap(~name, scales='free') +
-    geom_bar() +
+    geom_bar(width = .3) +
     ggthemes::theme_clean() + 
     scale_fill_manual(values = viridis::viridis(4)[3:4]) + 
     guides(fill = 'none') +
@@ -245,6 +212,8 @@ actuals
 ## Four Functions
 
 ```{r}
+#| code-line-numbers: "2,9,16,24|27"
+
 # returns a logistic object
 calc_logit = function(df, equation) {
   df = df |> mutate(retired = as_factor(retired))
@@ -281,12 +250,11 @@ simulate_one_year = function(actuals_df, logit, entrants_df, h) {
 }
 ```
 
-# Logistic Regression
+# Model Evaluation
 
 ## Logistic Models
 
 ```{r}
-#| code-line-numbers: "|4-5"
 models_all = tibble(
   model_id = 1:2,
   equation = c(
@@ -301,18 +269,20 @@ models_all = tibble(
 split = initial_split(filter(fake_data, !entered), prop = 0.8)
 train = training(split)
 test = testing(split)
+
+accuracy = models_all |>
+  rowwise(model_id, equation) |>
+  mutate(logit = list(calc_logit(train, equation))) |>
+  mutate(pred_retired = list(calc_retirements(test, logit))) |>
+  mutate(is_accurate = list(pred_retired == test$retired)) |>
+  mutate(accuracy = mean(is_accurate))
+
+accuracy
 ```
 
-::: fragment
 ```{r}
-# accuracy = models_all |>
-#   rowwise(model_id, equation) |>
-#   mutate(logit = list(calc_logit(train, equation))) |>
-#   mutate(pred_retired = list(calc_retirements(train, logit))) |>
-#   mutate(is_accurate = list(pred_retired == test$retired)) |>
-#   mutate(accuracy = mean(is_accurate))
-# 
-# accuracy
+#| eval: false
+#| echo: false
 
 
 accuracy = models_all |>
@@ -321,11 +291,20 @@ accuracy = models_all |>
   mutate(pred_retired = list(calc_retirements(filter(fake_data, !entered), logit))) |>
   mutate(is_accurate = list(pred_retired == filter(fake_data, !entered)$retired)) |>
   mutate(accuracy = mean(is_accurate))
+
+accuracy
 ```
-:::
 
 
 -   **Model #2 (barely) beats Model #1!**
+
+```{r}
+#| echo: false
+#| results: false
+
+stopifnot(accuracy$accuracy[[2]] > accuracy$accuracy[[1]])
+```
+
 
 ## Model Selection
 
@@ -353,7 +332,7 @@ logits
 ## Simulation
 
 ```{r}
-#| code-line-numbers: "|9|1-2|"
+#| code-line-numbers: "|7,10"
 
 forecasts = specialties |> select(spec_id)
 
@@ -373,9 +352,13 @@ forecasts$forecasts = actuals |>
 })
 ```
 
-## Result
+# Results
+
+## Graph
 
 ```{r}
+#| echo: false
+
 result = bind_rows(
   actuals |> unnest(actuals) |> mutate(is_forecast = F),
   forecasts |> unnest(forecasts) |> mutate(is_forecast = T)
@@ -394,10 +377,9 @@ result = bind_rows(
   )
 ```
 
-## Result (Graphically)
-
 ```{r}
-#| eval: false
+#| echo: false
+
 result |>
   pivot_longer(cols=c(headcount, retired, entered)) |>
   mutate(name = fct(name)) |>
@@ -414,30 +396,11 @@ result |>
   labs(color=NULL, x=NULL, y=NULL)
 ```
 
-## Result (Graphically)
+## Another Graph
 
 ```{r}
 #| echo: false
-result |>
-  pivot_longer(cols=c(headcount, retired, entered)) |>
-  mutate(name = fct(name)) |>
-  mutate(fiscal = fct(fiscal)) |>
-  ggplot(aes(x=fiscal, y=value, color=name, group=interaction(spec, name))) +
-  facet_wrap(~spec, scales='free') +
-  geom_line(data = ~filter(., !is_forecast)) +
-  geom_line(data = ~filter(., is_forecast), linetype = "dashed") +
-  geom_point() +
-  ggthemes::theme_clean() +
-  scale_color_viridis_d(option = "C") +
-  theme(legend.position = 'bottom') +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(color=NULL, x=NULL, y=NULL)
-```
 
-## Net Change
-
-```{r}
-#| echo: false
 result |>
   select(-headcount) |>
   mutate(retired = -retired) |>
@@ -453,35 +416,13 @@ result |>
   theme(legend.position = 'bottom') +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(fill=NULL, x=NULL, y=NULL)
-
-
-
 ```
 
-
-## Result (Table)
-
-```{r}
-#| eval: false
-result |>
-  reactable(
-    groupBy = "spec",
-    highlight = T,
-    fullWidth = F,
-    columns = list(
-      is_forecast = colDef(show = F),
-      spec = colDef(minWidth = 250)
-    ),
-    defaultColDef = colDef(style = function(value, index) {
-      if (result[[index, 'is_forecast']]) list(backgroundColor = 'lightyellow')
-    })
-  )
-```
-
-## Result (Table)
+## Table
 
 ```{r}
 #| echo: false
+
 result |>
   reactable(
     groupBy = "spec",
